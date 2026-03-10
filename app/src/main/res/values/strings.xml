@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Course Scheduler</string>
+
+    <!-- Bottom Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_calendar">Calendar</string>
+    <string name="nav_data">Data</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Home Fragment -->
+    <string name="welcome_message">Welcome, %1$s</string>
+    <string name="welcome_guest">Welcome</string>
+
+    <!-- Registration Dialog -->
+    <string name="dialog_registration_title">Profile Not Set Up</string>
+    <string name="dialog_registration_message">You have not completed your profile yet. Please go to Settings to register before using the app.</string>
+    <string name="dialog_go_to_settings">Go to Settings</string>
+
+    <!-- Settings Fragment -->
+    <string name="hint_name">Name</string>
+    <string name="hint_surname">Surname</string>
+    <string name="label_department">Department</string>
+    <string name="label_role">Role / Position</string>
+    <string name="btn_save">Save Profile</string>
+    <string name="profile_saved">Profile saved successfully</string>
+    <string name="error_name_required">Please enter your name and surname</string>
+
+    <!-- Calendar Fragment -->
+    <string name="calendar_placeholder">Schedule</string>
+
+    <!-- Data Fragment -->
+    <string name="fab_import_description">Import schedule data</string>
+</resources>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    IMPORTANT: Each item's android:id MUST match the corresponding fragment
+    destination ID in nav_graph.xml so that Navigation Component can automatically
+    manage the selected state and back-stack behaviour.
+-->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/homeFragment"
+        android:icon="@android:drawable/ic_menu_info_details"
+        android:title="@string/nav_home" />
+
+    <item
+        android:id="@+id/calendarFragment"
+        android:icon="@android:drawable/ic_menu_today"
+        android:title="@string/nav_calendar" />
+
+    <item
+        android:id="@+id/dataFragment"
+        android:icon="@android:drawable/ic_menu_manage"
+        android:title="@string/nav_data" />
+
+    <item
+        android:id="@+id/settingsFragment"
+        android:icon="@android:drawable/ic_menu_preferences"
+        android:title="@string/nav_settings" />
+
+</menu>

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Foreground layer for the adaptive launcher icon.
+    Draws a simple 5×2 schedule grid (representing the course matrix)
+    centred within the 108dp safe zone (inner 72dp).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Outer calendar border -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4"
+        android:pathData="M28,34 L80,34 L80,80 L28,80 Z" />
+
+    <!-- Horizontal dividers (5 rows × 2 columns grid) -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:pathData="M28,43 L80,43" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:pathData="M28,52 L80,52" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:pathData="M28,61 L80,61" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:pathData="M28,70 L80,70" />
+
+    <!-- Vertical divider (2 time slots) -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:pathData="M54,34 L54,80" />
+
+    <!-- Header bar fill -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.25"
+        android:pathData="M28,28 L80,28 L80,34 L28,34 Z" />
+
+    <!-- Calendar pin left -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,26 L38,32 Q38,33 39,33 L41,33 Q42,33 42,32 L42,26 Q42,25 41,25 L39,25 Q38,25 38,26 Z" />
+
+    <!-- Calendar pin right -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M66,26 L66,32 Q66,33 67,33 L69,33 Q70,33 70,32 L70,26 Q70,25 69,25 L67,25 Q66,25 66,26 Z" />
+
+</vector>
