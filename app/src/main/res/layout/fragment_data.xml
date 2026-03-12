@@ -3,18 +3,52 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@color/grey_100">
 
     <!--
-        Initial state: a centered "+" FAB for importing Excel/TXT data.
-        The FAB is hidden and replaced by the imported list in a later sprint.
+        INITIAL STATE: centred "+" FAB (VISIBLE).
+        AFTER IMPORT:  FAB gone, RecyclerView shown.
     -->
+
+    <!-- Empty-state label shown alongside the FAB before any file is imported -->
+    <TextView
+        android:id="@+id/tvEmptyState"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/data_empty_state"
+        android:textSize="14sp"
+        android:textColor="@color/grey_700"
+        android:layout_marginBottom="12dp"
+        app:layout_constraintBottom_toTopOf="@id/fabImport"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Centred import FAB — the sole visible element on first open -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabImport"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:contentDescription="@string/fab_import_description"
         app:srcCompat="@android:drawable/ic_input_add"
+        app:backgroundTint="@color/navy_800"
+        app:tint="@color/white"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!--
+        Imported-data list (accordion / expandable rows).
+        GONE until a file is successfully picked.
+    -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvImportedData"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        android:paddingBottom="16dp"
+        android:clipToPadding="false"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"

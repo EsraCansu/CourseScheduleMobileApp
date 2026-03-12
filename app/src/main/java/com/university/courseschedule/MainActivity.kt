@@ -1,3 +1,4 @@
+
 package com.university.courseschedule
 
 import android.content.Context
@@ -7,7 +8,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.navigation.NavController
 import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.setupWithNavController
+import com.university.courseschedule.data.AuthManager
 import com.university.courseschedule.databinding.ActivityMainBinding
+import com.university.courseschedule.data.model.Role
 import com.university.courseschedule.ui.home.HomeFragment.Companion.KEY_IS_REGISTERED
 import com.university.courseschedule.ui.home.HomeFragment.Companion.KEY_ROLE
 import com.university.courseschedule.ui.home.HomeFragment.Companion.PREFS_NAME
@@ -16,11 +19,14 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var navController: NavController
+    private lateinit var authManager: AuthManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        authManager = AuthManager.getInstance(this)
 
         val navHostFragment = supportFragmentManager
             .findFragmentById(R.id.navHostFragment) as NavHostFragment
@@ -32,26 +38,43 @@ class MainActivity : AppCompatActivity() {
 
         // Apply role-based tab visibility on every destination change so it
         // stays in sync after the user saves their profile in Settings.
-        navController.addOnDestinationChangedListener { _, _, _ ->
+        navController.addOnDestinationChangedListener { _, destination, _ ->
             applyRoleBasedNavVisibility()
+            
+            // Check if user is logged in when navigating to home
+            if (destination.id == R.id.homeFragment && !authManager.isLoggedIn()) {
+                // User not logged in - navigate to SignIn
+                navController.navigate(R.id.action_homeFragment_to_signInFragment)
+            }
         }
     }
 
     /**
-     * Hides the "Data" tab for Lecturers (per spec §6).
-     * Reads the persisted role from SharedPreferences; the tab is visible by
-     * default so Admins always see it without extra work.
+     * Enforces role-based tab visibility on every destination change.
+     *
+     * ADMIN   — all four tabs visible.
+     * LECTURER — Data and Settings tabs hidden (spec §3 / §6).
+     *
+     * Tabs remain in their default (all-visible) state until the user
+     * logs in, so the Settings tab is always reachable on first launch.
      */
     private fun applyRoleBasedNavVisibility() {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val isRegistered = prefs.getBoolean(KEY_IS_REGISTERED, false)
-        if (!isRegistered) return   // Don't adjust tabs until profile is saved.
+        // If not logged in, keep all tabs visible
+        if (!authManager.isLoggedIn()) {
+            // Ensure all tabs are visible
+            with(binding.bottomNavigationView.menu) {
+                findItem(R.id.dataFragment)?.isVisible = true
+                findItem(R.id.settingsFragment)?.isVisible = true
+            }
+            return
+        }
 
-        val role = prefs.getString(KEY_ROLE, "").orEmpty()
-        val isLecturer = role.equals("Lecturer", ignoreCase = true)
+        val user = authManager.getCurrentUser()
+        val isLecturer = user?.role == Role.LECTURER
 
-        binding.bottomNavigationView.menu
-            .findItem(R.id.dataFragment)
-            ?.isVisible = !isLecturer
+        with(binding.bottomNavigationView.menu) {
+            findItem(R.id.dataFragment)?.isVisible = !isLecturer
+            findItem(R.id.settingsFragment)?.isVisible = !isLecturer
+        }
     }
 }

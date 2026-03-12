@@ -20,7 +20,39 @@
             android:id="@+id/action_homeFragment_to_settingsFragment"
             app:destination="@id/settingsFragment"
             app:launchSingleTop="true" />
+
+        <!-- Action to navigate to SignIn when no session exists -->
+        <action
+            android:id="@+id/action_homeFragment_to_signInFragment"
+            app:destination="@id/signInFragment"
+            app:launchSingleTop="true" />
     </fragment>
+
+    <!-- Sign In Fragment -->
+    <fragment
+        android:id="@+id/signInFragment"
+        android:name="com.university.courseschedule.ui.auth.SignInFragment"
+        android:label="@string/sign_in"
+        tools:layout="@layout/fragment_signin">
+
+        <action
+            android:id="@+id/action_signInFragment_to_signUpFragment"
+            app:destination="@id/signUpFragment"
+            app:launchSingleTop="true" />
+
+        <action
+            android:id="@+id/action_signInFragment_to_homeFragment"
+            app:destination="@id/homeFragment"
+            app:popUpTo="@id/homeFragment"
+            app:popUpToInclusive="true" />
+    </fragment>
+
+    <!-- Sign Up Fragment -->
+    <fragment
+        android:id="@+id/signUpFragment"
+        android:name="com.university.courseschedule.ui.auth.SignUpFragment"
+        android:label="@string/sign_up"
+        tools:layout="@layout/fragment_signup" />
 
     <fragment
         android:id="@+id/calendarFragment"

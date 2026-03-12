@@ -31,4 +31,37 @@
 
     <!-- Data Fragment -->
     <string name="fab_import_description">Import schedule data</string>
+    <string name="data_empty_state">Tap + to import a schedule file (.txt, .csv or .xlsx)</string>
+    <string name="data_unknown_file">Unknown file</string>
+
+    <!-- Authentication -->
+    <string name="sign_in">Sign In</string>
+    <string name="sign_up">Sign Up</string>
+    <string name="hint_email">Email</string>
+    <string name="hint_password">Password</string>
+    <string name="hint_username">Username</string>
+    <string name="hint_confirm_password">Confirm Password</string>
+    <string name="label_role">Role</string>
+    <string name="btn_sign_in">Sign In</string>
+    <string name="btn_sign_up">Sign Up</string>
+    <string name="text_no_account">Don\'t have an account?</string>
+    <string name="text_sign_up">Sign Up</string>
+    <string name="text_have_account">Already have an account?</string>
+    <string name="text_sign_in_link">Sign In</string>
+    <string name="welcome_to_app">Welcome to CourseSchedule!</string>
+    <string name="btn_sign_in_prompt">Sign In</string>
+    <string name="error_invalid_credentials">Invalid email or password</string>
+    <string name="error_password_mismatch">Passwords do not match</string>
+    <string name="error_email_exists">Email already registered</string>
+    <string name="error_field_required">This field is required</string>
+    <string name="error_invalid_email">Please enter a valid email</string>
+
+    <!-- Admin Dashboard -->
+    <string name="admin_dashboard">Admin Dashboard</string>
+    <string name="total_lecturers">Total Lecturers: %d</string>
+    <string name="total_courses">Total Courses: %d</string>
+
+    <!-- Lecturer Courses -->
+    <string name="your_courses">Your Courses</string>
+    <string name="no_courses_assigned">No courses assigned</string>
 </resources>

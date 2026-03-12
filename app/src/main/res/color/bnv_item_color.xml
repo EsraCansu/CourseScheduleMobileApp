@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Color state list for BottomNavigationView icons and labels.
+    Active item: solid white.  Inactive item: 70% white (semi-transparent).
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@color/white" android:state_checked="true" />
+    <item android:color="#B3FFFFFF" />
+</selector>

@@ -1,10 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
-    <color name="black">#FF000000</color>
+    <!-- University Navy Blue scale -->
+    <color name="navy_900">#0D174E</color>  <!-- Darkest — status bar -->
+    <color name="navy_800">#1A237E</color>  <!-- Primary -->
+    <color name="navy_600">#283593</color>  <!-- Primary variant -->
+    <color name="navy_400">#5C6BC0</color>  <!-- Secondary / accent -->
+    <color name="navy_200">#9FA8DA</color>  <!-- Subtle tint -->
+
+    <!-- Neutral grey scale -->
+    <color name="grey_50">#FAFAFA</color>
+    <color name="grey_100">#F5F5F5</color>  <!-- Window / page background -->
+    <color name="grey_300">#E0E0E0</color>  <!-- Dividers -->
+    <color name="grey_700">#616161</color>  <!-- Secondary text -->
+    <color name="grey_900">#212121</color>  <!-- Primary text -->
+
+    <!-- Utility -->
     <color name="white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+    <color name="error_red">#B00020</color>
 </resources>
