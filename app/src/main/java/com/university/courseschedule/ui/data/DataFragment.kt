@@ -12,8 +12,10 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.imageview.ShapeableImageView
 import com.university.courseschedule.R
 import com.university.courseschedule.data.AuthManager
 import com.university.courseschedule.data.ScheduleMatrixManager
@@ -24,25 +26,36 @@ import com.university.courseschedule.ui.CourseViewModel
 import org.apache.poi.ss.usermodel.CellType
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.util.UUID
+import kotlinx.coroutines.launch
 
+/**
+ * DataFragment manages the import and display of course schedule data.
+ * 
+ * UI State Machine (Room Database as single source of truth):
+ * - EMPTY_STATE: Database empty + no file selected -> Show centered '+' button and hint text
+ * - FILE_SELECTED_STATE: File picked but not synced -> Show filename and 'SYNC DATA TO SYSTEM' button
+ * - DATA_LOADED_STATE: Database has records -> Hide import controls, show RecyclerView with lecturer profiles
+ */
 class DataFragment : Fragment() {
 
     private var _binding: FragmentDataBinding? = null
     private val binding get() = _binding!!
 
-    // Shared with CalendarFragment — same Activity scope.
+    // Shared with CalendarFragment - same Activity scope.
     private val viewModel: CourseViewModel by activityViewModels()
 
-    private val displayItems = mutableListOf<Course>()
-    private lateinit var listAdapter: CourseListAdapter
+    private lateinit var lecturerAdapter: LecturerListAdapter
 
     // Auth manager for creating users from imported data
     private lateinit var authManager: AuthManager
 
+    // Store selected file URI for processing later
+    private var selectedFileUri: Uri? = null
+
     // Track unique lecturers to avoid duplicate user creation
     private val processedLecturers = mutableMapOf<String, Lecturer>()
 
-    // System file picker — returns a persistable URI.
+    // System file picker - returns a persistable URI.
     private val filePicker = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -50,7 +63,9 @@ class DataFragment : Fragment() {
             requireContext().contentResolver.takePersistableUriPermission(
                 uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
             )
-            processImportedFile(uri)
+            // Store URI for later processing
+            selectedFileUri = uri
+            showFileSelectedState()
         }
     }
 
@@ -70,19 +85,72 @@ class DataFragment : Fragment() {
         authManager = AuthManager.getInstance(requireContext())
 
         setupRecyclerView()
+        setupClickListeners()
 
-        // ── Reload from DB on every visit so navigation away never clears the list ──
+        // Initialize matrix from database on fragment creation
+        // This ensures navigation back from other fragments shows data immediately
+        initializeFromDatabase()
+
+        // Single source of truth: observe both courses and lecturers from Room Database
+        // The UI state machine transitions based on database content and file selection status
+        
+        // Observe courses to determine if data exists in database
         viewModel.allCourses.observe(viewLifecycleOwner) { courses ->
             if (courses.isNullOrEmpty()) {
-                showEmptyState()
+                // Database is empty - check if file is selected
+                if (selectedFileUri != null) {
+                    showFileSelectedState()
+                } else {
+                    showEmptyState()
+                }
             } else {
-                displayItems.clear()
-                displayItems.addAll(courses)
-                listAdapter.notifyDataSetChanged()
-                showImportedList()
+                // Database has courses - show data loaded state
+                // Also sync matrix with database
+                syncMatrix(courses)
             }
         }
+        
+        // Observe lecturers to populate RecyclerView
+        viewModel.allLecturers.observe(viewLifecycleOwner) { lecturers ->
+            if (!lecturers.isNullOrEmpty()) {
+                lecturerAdapter.submitList(lecturers)
+                // Only show processed state if we also have courses
+                viewModel.allCourses.value?.let { courses ->
+                    if (courses.isNotEmpty()) {
+                        showDataLoadedState()
+                    }
+                }
+            }
+        }
+    }
 
+    /**
+     * Initialize matrix from database when fragment is created.
+     * This ensures that navigating to other fragments and returning
+     * does not result in a blank screen in CalendarFragment.
+     */
+    private fun initializeFromDatabase() {
+        // Check if database already has data and load matrix accordingly
+        viewModel.allCourses.value?.let { courses ->
+            if (courses.isNotEmpty()) {
+                syncMatrix(courses)
+            }
+        }
+        
+        // Also trigger matrix load from ViewModel
+        viewModel.loadMatrixFromDatabase()
+    }
+
+    private fun setupRecyclerView() {
+        lecturerAdapter = LecturerListAdapter()
+        binding.rvImportedData.apply {
+            layoutManager = LinearLayoutManager(requireContext())
+            adapter = lecturerAdapter
+        }
+    }
+
+    private fun setupClickListeners() {
+        // File selection button - only visible in empty state
         binding.fabImport.setOnClickListener {
             filePicker.launch(
                 arrayOf(
@@ -93,30 +161,58 @@ class DataFragment : Fragment() {
                 )
             )
         }
-    }
 
-    private fun setupRecyclerView() {
-        listAdapter = CourseListAdapter(displayItems)
-        binding.rvImportedData.apply {
-            layoutManager = LinearLayoutManager(requireContext())
-            adapter = listAdapter
+        // SYNC DATA TO SYSTEM button - visible only in the file-selected state
+        binding.btnProcess.setOnClickListener {
+            selectedFileUri?.let { uri -> processImportedFile(uri) }
         }
     }
 
     /**
-     * Parses the selected file and persists results to Room.
-     *
-     * TXT format expected (one course per line, pipe-delimited):
-     *   courseCode|courseName|lecturerName|lecturerID|deptIndex|dayIndex|slotIndex
-     *
-     * CSV format (comma-separated):
-     *   courseCode,courseName,lecturerName,lecturerID,deptIndex,dayIndex,slotIndex
-     *
-     * XLSX format (Excel with headers):
-     *   Course Code, Course Name, Lecturer, Passwords
-     *
-     * After a successful import the ViewModel writes to Room; the LiveData
-     * observer above then updates the RecyclerView automatically.
+     * EMPTY_STATE: Database empty and no file selected.
+     * Shows only the centered '+' button and hint text.
+     */
+    private fun showEmptyState() {
+        binding.fabImport.visibility = View.VISIBLE
+        binding.tvEmptyState.visibility = View.VISIBLE
+        binding.layoutFileSelected.visibility = View.GONE
+        binding.btnProcess.visibility = View.GONE
+        binding.rvImportedData.visibility = View.GONE
+    }
+
+    /**
+     * FILE_SELECTED_STATE: File picked but not yet synced to database.
+     * Displays the filename and the 'SYNC DATA TO SYSTEM' button.
+     */
+    private fun showFileSelectedState() {
+        selectedFileUri?.let { uri ->
+            val fileName = resolveDisplayName(uri)
+            binding.tvSelectedFileName.text = fileName
+        }
+        
+        binding.fabImport.visibility = View.GONE
+        binding.tvEmptyState.visibility = View.GONE
+        binding.layoutFileSelected.visibility = View.VISIBLE
+        binding.btnProcess.visibility = View.VISIBLE
+        binding.rvImportedData.visibility = View.GONE
+    }
+
+    /**
+     * DATA_LOADED_STATE: Database contains records.
+     * Hides the import controls and displays the RecyclerView with lecturer profiles.
+     */
+    private fun showDataLoadedState() {
+        binding.fabImport.visibility = View.GONE
+        binding.tvEmptyState.visibility = View.GONE
+        binding.layoutFileSelected.visibility = View.GONE
+        binding.btnProcess.visibility = View.GONE
+        binding.rvImportedData.visibility = View.VISIBLE
+    }
+
+    /**
+     * Parses the selected file and persists results to Room Database.
+     * This is called ONLY when user clicks "SYNC DATA TO SYSTEM" button.
+     * Performs a transaction: deleteAll() followed by insertAll(newCourses).
      */
     private fun processImportedFile(uri: Uri) {
         val mimeType = requireContext().contentResolver.getType(uri) ?: ""
@@ -144,7 +240,7 @@ class DataFragment : Fragment() {
                         }
                     }
             }
-            // XLSX parsing with Apache POI - supports Passwords column
+            // XLSX parsing with Apache POI
             mimeType.contains("spreadsheet") || fileName.endsWith(".xlsx") || fileName.endsWith(".xls") -> {
                 try {
                     parseExcelFile(uri, parsedCourses, parsedLecturers)
@@ -159,8 +255,10 @@ class DataFragment : Fragment() {
             }
         }
 
-        if (parsedCourses.isNotEmpty()) {
+        if (parsedCourses.isNotEmpty() || parsedLecturers.isNotEmpty()) {
             // Create users for imported lecturers with their passwords
+            // This ensures authentication alignment - lecturer names and passwords
+            // from the file are accessible for Sign In system validation
             parsedLecturers.forEach { lecturer ->
                 if (lecturer.password.isNotEmpty()) {
                     authManager.createOrUpdateLecturerFromImport(
@@ -173,27 +271,66 @@ class DataFragment : Fragment() {
                 }
             }
 
-            // Persist to Room and sync the in-memory matrix.
-            // Use the updated method that handles both courses and lecturers
-            viewModel.replaceAll(parsedCourses, parsedLecturers)
-            syncMatrix(parsedCourses)
+            // -- SAVE TO ROOM DATABASE: CRITICAL STEP --
+            // Perform transaction: deleteAll() followed by insertAll()
+            // Room Database is the single source of truth
+            viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    // Batch fetch all existing lecturers for O(1) lookups
+                    val existingLecturers = viewModel.allLecturers.value ?: emptyList()
+                    val existingMap = existingLecturers.associateBy { it.lecturerName }
 
+                    val updatedLecturers = mutableListOf<Lecturer>()
+
+                    for (lecturer in parsedLecturers) {
+                        val existingLecturer = existingMap[lecturer.lecturerName]
+                        if (existingLecturer != null) {
+                            // Update existing lecturer - keep same ID
+                            updatedLecturers.add(
+                                lecturer.copy(
+                                    id = existingLecturer.id,
+                                    lecturerID = existingLecturer.lecturerID
+                                )
+                            )
+                        } else {
+                            // New lecturer
+                            updatedLecturers.add(lecturer)
+                        }
+                    }
+
+                    // Save to Room - this triggers the LiveData observer
+                    // Uses atomic transaction: replaceAll does deleteAll + insertAll
+                    viewModel.replaceAll(parsedCourses, updatedLecturers)
+
+                    // Clear selected file after successful save
+                    selectedFileUri = null
+
+                    Toast.makeText(
+                        requireContext(),
+                        "Imported ${parsedCourses.size} courses and ${parsedLecturers.size} lecturers",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } catch (e: Exception) {
+                    Toast.makeText(
+                        requireContext(),
+                        "Error saving data: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+
+            // UI will be updated by the LiveData observer
+        } else {
             Toast.makeText(
                 requireContext(),
-                "Imported ${parsedCourses.size} courses and ${parsedLecturers.size} lecturers",
+                "No valid data found in file",
                 Toast.LENGTH_SHORT
             ).show()
         }
     }
 
     /**
-     * Parses an Excel (.xlsx) file with the following columns:
-     * - Course Code
-     * - Course Name
-     * - Lecturer
-     * - Passwords (optional)
-     *
-     * The first row is treated as headers and skipped.
+     * Parses an Excel (.xlsx) file
      */
     private fun parseExcelFile(
         uri: Uri,
@@ -202,45 +339,40 @@ class DataFragment : Fragment() {
     ) {
         requireContext().contentResolver.openInputStream(uri)?.use { inputStream ->
             val workbook = XSSFWorkbook(inputStream)
-            val sheet = workbook.getSheetAt(0) // Get first sheet
+            val sheet = workbook.getSheetAt(0)
 
-            // Skip header row, start from row 1
+            // Skip header row
             for (rowIndex in 1..sheet.lastRowNum) {
                 val row = sheet.getRow(rowIndex) ?: continue
 
-                // Read cells - handle both numeric and string cell types
                 val courseCode = getCellStringValue(row, 0)
                 val courseName = getCellStringValue(row, 1)
                 val lecturerName = getCellStringValue(row, 2)
                 val password = getCellStringValue(row, 3)
 
-                // Skip empty rows
                 if (courseCode.isEmpty() && courseName.isEmpty()) continue
 
-                // Generate lecturer ID if not already processed
                 val lecturerID = if (processedLecturers.containsKey(lecturerName)) {
                     processedLecturers[lecturerName]?.lecturerID ?: UUID.randomUUID().toString()
                 } else {
                     UUID.randomUUID().toString()
                 }
 
-                // Generate email from lecturer name if not provided
                 val email = generateEmailFromName(lecturerName)
 
-                // Store lecturer with password (if provided)
                 if (!processedLecturers.containsKey(lecturerName)) {
                     val lecturer = Lecturer(
                         lecturerID = lecturerID,
                         lecturerName = lecturerName,
+                        courseCode = courseCode,
                         email = email,
                         password = password,
-                        departmentIndex = 0 // Default department, can be updated
+                        departmentIndex = 0
                     )
                     processedLecturers[lecturerName] = lecturer
                     lecturers.add(lecturer)
                 }
 
-                // Create course with lecturer password stored for reference
                 val course = Course(
                     courseCode = courseCode,
                     courseName = courseName,
@@ -258,9 +390,6 @@ class DataFragment : Fragment() {
         }
     }
 
-    /**
-     * Gets the string value from a cell, handling both string and numeric types.
-     */
     private fun getCellStringValue(row: org.apache.poi.ss.usermodel.Row, columnIndex: Int): String {
         val cell = row.getCell(columnIndex) ?: return ""
         return when (cell.cellType) {
@@ -277,10 +406,6 @@ class DataFragment : Fragment() {
         }
     }
 
-    /**
-     * Generates an email address from the lecturer's name.
-     * Example: "John Smith" -> "john.smith@university.edu"
-     */
     private fun generateEmailFromName(name: String): String {
         val cleanName = name.trim().lowercase()
             .replace(Regex("[^a-z\\s]"), "")
@@ -288,11 +413,6 @@ class DataFragment : Fragment() {
         return "$cleanName@university.edu"
     }
 
-    /**
-     * Parses a single pipe-delimited TXT line.
-     * Returns null and silently skips malformed lines.
-     * Format: courseCode|courseName|lecturerName|lecturerID|deptIndex|dayIndex|slotIndex
-     */
     private fun parseTxtLine(line: String): Course? {
         val parts = line.trim().split("|")
         if (parts.size < 7) return null
@@ -311,11 +431,6 @@ class DataFragment : Fragment() {
         }
     }
 
-    /**
-     * Parses a single comma-delimited CSV line.
-     * Returns null and silently skips malformed lines.
-     * Format: courseCode,courseName,lecturerName,lecturerID,deptIndex,dayIndex,slotIndex
-     */
     private fun parseCsvLine(line: String): Course? {
         val parts = line.trim().split(",")
         if (parts.size < 7) return null
@@ -334,7 +449,11 @@ class DataFragment : Fragment() {
         }
     }
 
-    /** Writes parsed courses into the shared in-memory ScheduleMatrixManager. */
+    /**
+     * Synchronizes the ScheduleMatrixManager with the Room Database.
+     * This is called whenever the database is updated to ensure CalendarFragment
+     * renders the correct schedule.
+     */
     private fun syncMatrix(courses: List<Course>) {
         ScheduleMatrixManager.clearAll()
         courses.forEach { course ->
@@ -354,45 +473,41 @@ class DataFragment : Fragment() {
                 if (cursor.moveToFirst()) cursor.getString(0) else null
             } ?: uri.lastPathSegment ?: getString(R.string.data_unknown_file)
 
-    private fun showEmptyState() {
-        binding.fabImport.visibility      = View.VISIBLE
-        binding.tvEmptyState.visibility   = View.VISIBLE
-        binding.rvImportedData.visibility = View.GONE
-    }
-
-    /** Hides the FAB + empty-state; reveals the list. */
-    private fun showImportedList() {
-        binding.fabImport.visibility      = View.GONE
-        binding.tvEmptyState.visibility   = View.GONE
-        binding.rvImportedData.visibility = View.VISIBLE
-    }
-
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
     }
 
-    // ── Adapter ───────────────────────────────────────────────────────────────
+    // -- Lecturer Adapter using item_lecturer_profile.xml --
 
-    private inner class CourseListAdapter(
-        private val items: List<Course>
-    ) : RecyclerView.Adapter<CourseListAdapter.ViewHolder>() {
+    private class LecturerListAdapter : RecyclerView.Adapter<LecturerListAdapter.ViewHolder>() {
 
-        inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-            val tvName: TextView = view.findViewById(R.id.tvItemName)
+        private var lecturers = listOf<Lecturer>()
+
+        fun submitList(newList: List<Lecturer>) {
+            lecturers = newList
+            notifyDataSetChanged()
+        }
+
+        class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+            val ivProfileImage: ShapeableImageView = view.findViewById(R.id.ivProfileImage)
+            val tvLecturerName: TextView = view.findViewById(R.id.tvLecturerName)
+            val tvCourseCode: TextView = view.findViewById(R.id.tvCourseCode)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+            // Use item_lecturer_profile.xml for circular image + name design
             val view = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_imported_file, parent, false)
+                .inflate(R.layout.item_lecturer_profile, parent, false)
             return ViewHolder(view)
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            val course = items[position]
-            holder.tvName.text = "${course.courseCode} — ${course.courseName} (${course.lecturerName})"
+            val lecturer = lecturers[position]
+            holder.tvLecturerName.text = lecturer.lecturerName
+            holder.tvCourseCode.text = if (lecturer.courseCode.isNotEmpty()) lecturer.courseCode else lecturer.email
         }
 
-        override fun getItemCount(): Int = items.size
+        override fun getItemCount(): Int = lecturers.size
     }
 }

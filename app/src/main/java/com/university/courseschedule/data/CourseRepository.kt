@@ -18,9 +18,11 @@ class CourseRepository(private val dao: CourseDao) {
     fun getCoursesByDepartment(deptIndex: Int): LiveData<List<Course>> =
         dao.getCoursesByDepartment(deptIndex)
 
-    /** Replace the entire course table with [courses] in one transaction. */
+    /**
+     * Replace the entire course table with [courses] in one atomic transaction.
+     * This performs deleteAll() followed by insertAll(newCourses) within a transaction.
+     */
     suspend fun replaceAll(courses: List<Course>) {
-        dao.deleteAll()
-        dao.insertAll(courses)
+        dao.replaceAllInTransaction(courses)
     }
 }

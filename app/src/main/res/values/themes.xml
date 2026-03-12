@@ -6,6 +6,12 @@
           Secondary — Indigo Accent   #5C6BC0
           Background — Light Grey     #F5F5F5
     -->
+    <!-- Circular crop for ShapeableImageView -->
+    <style name="CircleImageView" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
+    </style>
+
     <style name="Theme.CourseSchedule" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <!-- Brand colours -->
         <item name="colorPrimary">@color/navy_800</item>

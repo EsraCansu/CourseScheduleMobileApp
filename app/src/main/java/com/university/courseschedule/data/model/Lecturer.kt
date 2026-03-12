@@ -12,6 +12,7 @@ import androidx.room.PrimaryKey
  * @property id             Auto-generated primary key.
  * @property lecturerID     UUID of the lecturer — matches User.id for authentication.
  * @property lecturerName   Display name of the lecturer.
+ * @property imageUrl       Profile image URL (uses placeholder drawable if not set).
  * @property email          Email address (derived from name if not in file).
  * @property password       Password for authentication (imported or auto-generated).
  * @property departmentIndex Department index (0-4) for filtering.
@@ -21,6 +22,8 @@ data class Lecturer(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val lecturerID: String,
     val lecturerName: String,
+    val courseCode: String = "",
+    val imageUrl: String = "",
     val email: String = "",
     val password: String = "",
     val departmentIndex: Int = 0

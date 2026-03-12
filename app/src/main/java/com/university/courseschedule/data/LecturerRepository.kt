@@ -13,11 +13,18 @@ class LecturerRepository(private val dao: LecturerDao) {
     val allLecturers: LiveData<List<Lecturer>> = dao.getAllLecturers()
 
     /**
-     * Replace the entire lecturer table with [lecturers] in one transaction.
+     * Insert or replace lecturers without clearing existing data.
+     */
+    suspend fun insertAll(lecturers: List<Lecturer>) {
+        dao.insertAll(lecturers)
+    }
+
+    /**
+     * Replace the entire lecturer table with [lecturers] in one atomic transaction.
+     * This performs deleteAll() followed by insertAll(newLecturers) within a transaction.
      */
     suspend fun replaceAll(lecturers: List<Lecturer>) {
-        dao.deleteAll()
-        dao.insertAll(lecturers)
+        dao.replaceAllInTransaction(lecturers)
     }
 
     /**
@@ -31,4 +38,11 @@ class LecturerRepository(private val dao: LecturerDao) {
      */
     suspend fun getLecturerByEmail(email: String): Lecturer? =
         dao.getLecturerByEmail(email)
+
+    /**
+     * Get a specific lecturer by name.
+     * Used for duplicate detection before import.
+     */
+    suspend fun getLecturerByName(name: String): Lecturer? =
+        dao.getLecturerByName(name)
 }

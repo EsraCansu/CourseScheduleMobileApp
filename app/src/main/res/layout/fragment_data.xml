@@ -8,7 +8,8 @@
 
     <!--
         INITIAL STATE: centred "+" FAB (VISIBLE).
-        AFTER IMPORT:  FAB gone, RecyclerView shown.
+        AFTER FILE SELECTION: Show filename and "Process File" button.
+        AFTER PROCESSING: FAB gone, RecyclerView shown.
     -->
 
     <!-- Empty-state label shown alongside the FAB before any file is imported -->
@@ -38,9 +39,59 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <!-- File selection state: shows selected filename and Process button -->
+    <LinearLayout
+        android:id="@+id/layoutFileSelected"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/btnProcess"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:id="@+id/tvSelectedFileName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="16sp"
+            android:textColor="@color/navy_800"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp" />
+
+    </LinearLayout>
+
+    <!-- READ AND SYNC EXCEL button - visible when no data in database -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnProcessData"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="READ AND SYNC EXCEL"
+        android:visibility="visible"
+        app:backgroundTint="@color/navy_800"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Process & Sync Schedule button - visible after file selection -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnProcess"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Process & Sync Schedule"
+        android:visibility="gone"
+        app:backgroundTint="@color/navy_800"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <!--
         Imported-data list (accordion / expandable rows).
-        GONE until a file is successfully picked.
+        GONE until a file is successfully processed.
     -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvImportedData"

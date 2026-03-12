@@ -3,9 +3,11 @@ package com.university.courseschedule.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import com.university.courseschedule.data.CourseRepository
 import com.university.courseschedule.data.LecturerRepository
+import com.university.courseschedule.data.ScheduleMatrixManager
 import com.university.courseschedule.data.db.AppDatabase
 import com.university.courseschedule.data.model.Course
 import com.university.courseschedule.data.model.Lecturer
@@ -34,6 +36,10 @@ class CourseViewModel(app: Application) : AndroidViewModel(app) {
     /** All lecturers — observed by DataFragment for lecturer list. */
     val allLecturers: LiveData<List<Lecturer>> = lecturerRepository.allLecturers
 
+    /** Tracks whether data has been imported and processed. */
+    private val _isDataImported = MutableLiveData(false)
+    val isDataImported: LiveData<Boolean> = _isDataImported
+
     fun getCoursesByLecturer(lecturerID: String): LiveData<List<Course>> =
         courseRepository.getCoursesByLecturer(lecturerID)
 
@@ -45,7 +51,10 @@ class CourseViewModel(app: Application) : AndroidViewModel(app) {
      * Clears the table and inserts the new list atomically.
      */
     fun replaceAllCourses(courses: List<Course>) {
-        viewModelScope.launch { courseRepository.replaceAll(courses) }
+        viewModelScope.launch { 
+            courseRepository.replaceAll(courses)
+            syncMatrixWithDatabase(courses)
+        }
     }
 
     /**
@@ -58,11 +67,70 @@ class CourseViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * Convenience method to replace both courses and lecturers at once.
+     * This also synchronizes the ScheduleMatrixManager with the Room Database.
      */
     fun replaceAll(courses: List<Course>, lecturers: List<Lecturer>) {
         viewModelScope.launch {
             courseRepository.replaceAll(courses)
             lecturerRepository.replaceAll(lecturers)
+            // Sync matrix after database update
+            syncMatrixWithDatabase(courses)
+            _isDataImported.postValue(true)
         }
+    }
+
+    /**
+     * Synchronizes the ScheduleMatrixManager with the Room Database.
+     * This is called whenever the database is updated to ensure CalendarFragment
+     * renders the correct schedule.
+     */
+    private fun syncMatrixWithDatabase(courses: List<Course>) {
+        ScheduleMatrixManager.clearAll()
+        courses.forEach { course ->
+            ScheduleMatrixManager.setCourse(
+                course.departmentIndex,
+                course.dayIndex,
+                course.timeSlotIndex,
+                course
+            )
+        }
+    }
+
+    /**
+     * Loads matrix from database - used on app startup to restore matrix state.
+     * This ensures navigation to CalendarFragment shows data immediately.
+     */
+    fun loadMatrixFromDatabase() {
+        viewModelScope.launch {
+            val courses = allCourses.value
+            if (!courses.isNullOrEmpty()) {
+                syncMatrixWithDatabase(courses)
+            }
+        }
+    }
+
+    /**
+     * Insert lecturers without clearing existing records.
+     * Use when you want to append rather than replace.
+     */
+    fun insertLecturers(lecturers: List<Lecturer>) {
+        viewModelScope.launch {
+            lecturerRepository.insertAll(lecturers)
+            _isDataImported.postValue(true)
+        }
+    }
+
+    /**
+     * Resets the data import state.
+     */
+    fun resetDataImportState() {
+        _isDataImported.value = false
+    }
+
+    /**
+     * Get a lecturer by name for duplicate detection.
+     */
+    suspend fun getLecturerByName(name: String): Lecturer? {
+        return lecturerRepository.getLecturerByName(name)
     }
 }

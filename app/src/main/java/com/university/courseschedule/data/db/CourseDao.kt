@@ -5,6 +5,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import com.university.courseschedule.data.model.Course
 
 @Dao
@@ -32,4 +33,16 @@ interface CourseDao {
     /** Clear the whole table before a fresh import. */
     @Query("DELETE FROM courses")
     suspend fun deleteAll()
+
+    /**
+     * Atomic transaction: delete all courses then insert new ones.
+     * This ensures the database is the single source of truth.
+     */
+    @Transaction
+    suspend fun replaceAllInTransaction(courses: List<Course>) {
+        deleteAll()
+        if (courses.isNotEmpty()) {
+            insertAll(courses)
+        }
+    }
 }
