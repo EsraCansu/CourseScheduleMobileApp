@@ -41,8 +41,9 @@
     <string name="hint_password">Password</string>
     <string name="hint_username">Username</string>
     <string name="hint_confirm_password">Confirm Password</string>
-    <string name="label_role">Role</string>
+    <string name="label_auth_role">Role</string>
     <string name="btn_sign_in">Sign In</string>
+    <string name="signing_in">Signing in…</string>
     <string name="btn_sign_up">Sign Up</string>
     <string name="text_no_account">Don\'t have an account?</string>
     <string name="text_sign_up">Sign Up</string>
@@ -64,4 +65,20 @@
     <!-- Lecturer Courses -->
     <string name="your_courses">Your Courses</string>
     <string name="no_courses_assigned">No courses assigned</string>
+
+    <!-- First Login Warning -->
+    <string name="warning_first_login">Please change your password for security. Go to Settings to update.</string>
+
+    <!-- Logout -->
+    <string name="btn_logout">Logout</string>
+
+    <!-- Settings: Dark Mode -->
+    <string name="label_dark_mode">Dark Mode</string>
+
+    <!-- Settings: Password Change -->
+    <string name="hint_current_password">Current Password</string>
+    <string name="hint_new_password">New Password</string>
+    <string name="error_password_too_short">Password must be at least 6 characters</string>
+    <string name="password_changed">Password changed successfully</string>
+    <string name="error_current_password_wrong">Current password is incorrect</string>
 </resources>

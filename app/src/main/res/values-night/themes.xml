@@ -1,17 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!--
-        Brand colour: Teal #00c4cc (spec §4)
-        Harmonious palette generated from the primary brand colour.
-    -->
-    <!-- Circular crop for ShapeableImageView -->
+    <!-- Dark mode overrides for Theme.CourseSchedule -->
     <style name="CircleImageView" parent="">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">50%</item>
     </style>
 
     <style name="Theme.CourseSchedule" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Brand colours -->
+        <!-- Brand colours remain the same in dark mode -->
         <item name="colorPrimary">@color/brand_500</item>
         <item name="colorPrimaryVariant">@color/brand_900</item>
         <item name="colorOnPrimary">@color/white</item>
@@ -19,14 +15,14 @@
         <item name="colorSecondaryVariant">@color/brand_700</item>
         <item name="colorOnSecondary">@color/white</item>
 
-        <!-- Surface / background -->
-        <item name="colorSurface">@color/white</item>
-        <item name="colorOnSurface">@color/grey_900</item>
-        <item name="android:colorBackground">@color/grey_100</item>
-        <item name="android:windowBackground">@color/grey_100</item>
+        <!-- Dark surfaces -->
+        <item name="colorSurface">#1E1E1E</item>
+        <item name="colorOnSurface">#E0E0E0</item>
+        <item name="android:colorBackground">#121212</item>
+        <item name="android:windowBackground">#121212</item>
 
-        <!-- Status bar matches the darkest teal -->
-        <item name="android:statusBarColor">@color/brand_900</item>
+        <!-- Status bar — dark -->
+        <item name="android:statusBarColor">#121212</item>
 
         <!-- Error -->
         <item name="colorError">@color/error_red</item>

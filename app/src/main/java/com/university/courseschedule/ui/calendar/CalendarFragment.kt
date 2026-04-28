@@ -1,6 +1,5 @@
 package com.university.courseschedule.ui.calendar
 
-import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -8,16 +7,18 @@ import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.TextView
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import com.university.courseschedule.R
+import com.university.courseschedule.data.AuthManager
+import com.university.courseschedule.data.LecturerAvailabilityManager
 import com.university.courseschedule.data.ScheduleMatrixManager
 import com.university.courseschedule.data.model.Course
 import com.university.courseschedule.data.model.Department
+import com.university.courseschedule.data.model.Role
 import com.university.courseschedule.databinding.FragmentCalendarBinding
 import com.university.courseschedule.ui.CourseViewModel
-import com.university.courseschedule.ui.home.HomeFragment.Companion.KEY_DEPARTMENT
-import com.university.courseschedule.ui.home.HomeFragment.Companion.KEY_ROLE
-import com.university.courseschedule.ui.home.HomeFragment.Companion.PREFS_NAME
 
 class CalendarFragment : Fragment() {
 
@@ -25,6 +26,11 @@ class CalendarFragment : Fragment() {
     private val binding get() = _binding!!
 
     private val viewModel: CourseViewModel by activityViewModels()
+    private lateinit var authManager: AuthManager
+    private lateinit var availabilityManager: LecturerAvailabilityManager
+
+    // Track current mode: false = view courses, true = set availability
+    private var isAvailabilityMode = false
 
     // cells[day 0-4][slot 0-1] — wired up in onViewCreated
     private lateinit var cells: Array<Array<TextView>>
@@ -41,6 +47,9 @@ class CalendarFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        authManager = AuthManager.getInstance(requireContext())
+        availabilityManager = LecturerAvailabilityManager.getInstance(requireContext())
+
         // Build the cell look-up table from the layout IDs
         cells = arrayOf(
             arrayOf(binding.cell00, binding.cell01),
@@ -50,14 +59,85 @@ class CalendarFragment : Fragment() {
             arrayOf(binding.cell40, binding.cell41)
         )
 
-        val prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val role   = prefs.getString(KEY_ROLE, "").orEmpty()
-        val userId = prefs.getString("user_id", "").orEmpty()
+        // Setup click listeners for cells (for lecturer availability toggle)
+        setupCellClickListeners()
 
-        if (role.equals("Admin", ignoreCase = true)) {
-            setupAdminView(prefs.getString(KEY_DEPARTMENT, null))
+        // Use AuthManager (single source of truth) instead of raw SharedPreferences
+        val user = authManager.getCurrentUser()
+
+        if (user?.role == Role.ADMIN) {
+            setupAdminView(user.department.displayName)
         } else {
-            setupLecturerView(userId)
+            setupLecturerView(user?.id ?: "")
+        }
+
+        // Show mode toggle only for lecturers
+        if (user?.role == Role.LECTURER) {
+            binding.layoutModeToggle.visibility = View.VISIBLE
+        } else {
+            binding.layoutModeToggle.visibility = View.GONE
+        }
+    }
+
+    /**
+     * Sets up click listeners for grid cells to toggle availability.
+     * Only active for lecturers in availability mode.
+     */
+    private fun setupCellClickListeners() {
+        for (day in 0 until ScheduleMatrixManager.DAY_COUNT) {
+            for (slot in 0 until ScheduleMatrixManager.TIME_SLOT_COUNT) {
+                cells[day][slot].setOnClickListener {
+                    val user = authManager.getCurrentUser()
+                    if (user?.role == Role.LECTURER && isAvailabilityMode) {
+                        toggleAvailability(user.id, day, slot)
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Toggles availability for a specific slot and updates the UI.
+     */
+    private fun toggleAvailability(lecturerId: String, day: Int, slot: Int) {
+        val currentAvailability = availabilityManager.getAvailability(lecturerId, day, slot)
+        val newAvailability = !currentAvailability
+        availabilityManager.setAvailability(lecturerId, day, slot, newAvailability)
+        
+        // Update the cell appearance
+        updateCellAppearance(lecturerId, day, slot, newAvailability)
+        
+        val status = if (newAvailability) "Available" else "Busy"
+        Toast.makeText(
+            requireContext(),
+            "${LecturerAvailabilityManager.dayLabels[day]} ${LecturerAvailabilityManager.timeSlotLabels[slot]}: $status",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    /**
+     * Updates the cell appearance based on availability status.
+     */
+    private fun updateCellAppearance(lecturerId: String, day: Int, slot: Int, isAvailable: Boolean) {
+        val cell = cells[day][slot]
+        if (isAvailable) {
+            cell.setBackgroundColor(resources.getColor(R.color.teal_200, null))
+            cell.text = "✓ Available"
+        } else {
+            cell.setBackgroundColor(resources.getColor(R.color.red_200, null))
+            cell.text = "✗ Busy"
+        }
+    }
+
+    /**
+     * Refreshes the grid to show availability status for lecturer.
+     */
+    private fun refreshAvailabilityGrid(lecturerId: String) {
+        val availability = availabilityManager.getAllAvailability(lecturerId)
+        for (day in 0 until ScheduleMatrixManager.DAY_COUNT) {
+            for (slot in 0 until ScheduleMatrixManager.TIME_SLOT_COUNT) {
+                updateCellAppearance(lecturerId, day, slot, availability[day][slot])
+            }
         }
     }
 
@@ -116,6 +196,20 @@ class CalendarFragment : Fragment() {
     private fun setupLecturerView(userId: String) {
         binding.spinnerDepartment.visibility = View.GONE
 
+        // Setup toggle listener
+        binding.toggleAvailabilityMode.setOnCheckedChangeListener { _, isChecked ->
+            isAvailabilityMode = isChecked
+            if (isChecked) {
+                // Show availability grid
+                refreshAvailabilityGrid(userId)
+            } else {
+                // Show courses
+                viewModel.getCoursesByLecturer(userId).observe(viewLifecycleOwner) { courses ->
+                    refreshLecturerGrid(courses)
+                }
+            }
+        }
+
         viewModel.getCoursesByLecturer(userId).observe(viewLifecycleOwner) { courses ->
             refreshLecturerGrid(courses)
         }
@@ -142,4 +236,3 @@ class CalendarFragment : Fragment() {
         _binding = null
     }
 }
-

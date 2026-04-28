@@ -10,17 +10,24 @@ import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.imageview.ShapeableImageView
 import com.university.courseschedule.R
 import com.university.courseschedule.data.AuthManager
+import com.university.courseschedule.data.ConflictManager
+import com.university.courseschedule.data.FirestoreManager
+import com.university.courseschedule.data.ImportConflict
 import com.university.courseschedule.data.ScheduleMatrixManager
 import com.university.courseschedule.data.model.Course
 import com.university.courseschedule.data.model.Lecturer
+import com.university.courseschedule.data.model.LecturerWithCourses
+import com.university.courseschedule.data.model.Role
 import com.university.courseschedule.databinding.FragmentDataBinding
 import com.university.courseschedule.ui.CourseViewModel
 import org.apache.poi.ss.usermodel.CellType
@@ -31,10 +38,13 @@ import kotlinx.coroutines.launch
 /**
  * DataFragment manages the import and display of course schedule data.
  * 
+ * Lecturer-Centric UI: The primary entity is the Lecturer, with their
+ * assigned courses grouped underneath. Each lecturer appears only once.
+ * 
  * UI State Machine (Room Database as single source of truth):
  * - EMPTY_STATE: Database empty + no file selected -> Show centered '+' button and hint text
  * - FILE_SELECTED_STATE: File picked but not synced -> Show filename and 'SYNC DATA TO SYSTEM' button
- * - DATA_LOADED_STATE: Database has records -> Hide import controls, show RecyclerView with lecturer profiles
+ * - DATA_LOADED_STATE: Database has records -> Show RecyclerView with lecturer cards + persistent Update FAB
  */
 class DataFragment : Fragment() {
 
@@ -44,10 +54,13 @@ class DataFragment : Fragment() {
     // Shared with CalendarFragment - same Activity scope.
     private val viewModel: CourseViewModel by activityViewModels()
 
-    private lateinit var lecturerAdapter: LecturerListAdapter
+    private lateinit var lecturerAdapter: LecturerCardAdapter
 
     // Auth manager for creating users from imported data
     private lateinit var authManager: AuthManager
+    
+    // Firestore manager for cloud sync operations
+    private lateinit var firestoreManager: FirestoreManager
 
     // Store selected file URI for processing later
     private var selectedFileUri: Uri? = null
@@ -83,6 +96,9 @@ class DataFragment : Fragment() {
 
         // Initialize AuthManager
         authManager = AuthManager.getInstance(requireContext())
+        
+        // Initialize FirestoreManager
+        firestoreManager = FirestoreManager.getInstance()
 
         setupRecyclerView()
         setupClickListeners()
@@ -104,16 +120,15 @@ class DataFragment : Fragment() {
                     showEmptyState()
                 }
             } else {
-                // Database has courses - show data loaded state
-                // Also sync matrix with database
+                // Database has courses - also sync matrix with database
                 syncMatrix(courses)
             }
         }
         
-        // Observe lecturers to populate RecyclerView
-        viewModel.allLecturers.observe(viewLifecycleOwner) { lecturers ->
-            if (!lecturers.isNullOrEmpty()) {
-                lecturerAdapter.submitList(lecturers)
+        // Observe grouped lecturers with courses to populate RecyclerView
+        viewModel.lecturersWithCourses.observe(viewLifecycleOwner) { grouped ->
+            if (!grouped.isNullOrEmpty()) {
+                lecturerAdapter.submitList(grouped)
                 // Only show processed state if we also have courses
                 viewModel.allCourses.value?.let { courses ->
                     if (courses.isNotEmpty()) {
@@ -142,7 +157,9 @@ class DataFragment : Fragment() {
     }
 
     private fun setupRecyclerView() {
-        lecturerAdapter = LecturerListAdapter()
+        lecturerAdapter = LecturerCardAdapter { lecturerWithCourses ->
+            showLecturerDetailBottomSheet(lecturerWithCourses)
+        }
         binding.rvImportedData.apply {
             layoutManager = LinearLayoutManager(requireContext())
             adapter = lecturerAdapter
@@ -152,20 +169,35 @@ class DataFragment : Fragment() {
     private fun setupClickListeners() {
         // File selection button - only visible in empty state
         binding.fabImport.setOnClickListener {
-            filePicker.launch(
-                arrayOf(
-                    "text/plain",
-                    "text/csv",
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    "application/vnd.ms-excel"
-                )
-            )
+            launchFilePicker()
         }
 
         // SYNC DATA TO SYSTEM button - visible only in the file-selected state
         binding.btnProcess.setOnClickListener {
             selectedFileUri?.let { uri -> processImportedFile(uri) }
         }
+
+        // Persistent "Update Data" FAB - visible in DATA_LOADED_STATE
+        // Allows Admin to re-import / replace existing dataset
+        binding.fabUpdateData.setOnClickListener {
+            launchFilePicker()
+        }
+
+        // "Push to Cloud" button - visible only for Admin when data is loaded
+        binding.btnPushToCloud.setOnClickListener {
+            pushDataToCloud()
+        }
+    }
+
+    private fun launchFilePicker() {
+        filePicker.launch(
+            arrayOf(
+                "text/plain",
+                "text/csv",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "application/vnd.ms-excel"
+            )
+        )
     }
 
     /**
@@ -178,6 +210,7 @@ class DataFragment : Fragment() {
         binding.layoutFileSelected.visibility = View.GONE
         binding.btnProcess.visibility = View.GONE
         binding.rvImportedData.visibility = View.GONE
+        binding.fabUpdateData.visibility = View.GONE
     }
 
     /**
@@ -195,11 +228,13 @@ class DataFragment : Fragment() {
         binding.layoutFileSelected.visibility = View.VISIBLE
         binding.btnProcess.visibility = View.VISIBLE
         binding.rvImportedData.visibility = View.GONE
+        binding.fabUpdateData.visibility = View.GONE
     }
 
     /**
      * DATA_LOADED_STATE: Database contains records.
-     * Hides the import controls and displays the RecyclerView with lecturer profiles.
+     * Shows the RecyclerView with lecturer cards and the persistent Update Data FAB.
+     * Also shows "Push to Cloud" button for Admin users when Firebase is configured.
      */
     private fun showDataLoadedState() {
         binding.fabImport.visibility = View.GONE
@@ -207,6 +242,47 @@ class DataFragment : Fragment() {
         binding.layoutFileSelected.visibility = View.GONE
         binding.btnProcess.visibility = View.GONE
         binding.rvImportedData.visibility = View.VISIBLE
+        binding.fabUpdateData.visibility = View.VISIBLE
+        
+        // Show "Push to Cloud" button for Admin users when Firebase is configured
+        val currentUser = authManager.getCurrentUser()
+        val isAdmin = currentUser?.role == Role.ADMIN
+        val isFirebaseConfigured = FirestoreManager.isFirebaseConfigured()
+        
+        if (isAdmin && isFirebaseConfigured) {
+            binding.btnPushToCloud.visibility = View.VISIBLE
+            binding.tvCloudStatus.visibility = View.VISIBLE
+            binding.tvCloudStatus.text = "Cloud sync available"
+        } else {
+            binding.btnPushToCloud.visibility = View.GONE
+            binding.tvCloudStatus.visibility = View.GONE
+        }
+    }
+
+    // -- Lecturer Detail BottomSheet --
+
+    /**
+     * Shows a BottomSheetDialog with the lecturer's detail info:
+     * - Full name and email
+     * - System password from the imported file
+     * - List of all assigned courses
+     */
+    private fun showLecturerDetailBottomSheet(item: LecturerWithCourses) {
+        val dialog = BottomSheetDialog(requireContext())
+        val sheetView = layoutInflater.inflate(R.layout.bottom_sheet_lecturer_detail, null)
+
+        sheetView.findViewById<TextView>(R.id.tvDetailLecturerName).text = item.lecturer.lecturerName
+        sheetView.findViewById<TextView>(R.id.tvDetailEmail).text = item.lecturer.email
+        sheetView.findViewById<TextView>(R.id.tvDetailPassword).text =
+            if (item.lecturer.password.isNotEmpty()) item.lecturer.password else "(not set)"
+
+        // Setup courses list inside the BottomSheet
+        val rvCourses = sheetView.findViewById<RecyclerView>(R.id.rvDetailCourses)
+        rvCourses.layoutManager = LinearLayoutManager(requireContext())
+        rvCourses.adapter = CourseDetailAdapter(item.courses)
+
+        dialog.setContentView(sheetView)
+        dialog.show()
     }
 
     /**
@@ -256,70 +332,8 @@ class DataFragment : Fragment() {
         }
 
         if (parsedCourses.isNotEmpty() || parsedLecturers.isNotEmpty()) {
-            // Create users for imported lecturers with their passwords
-            // This ensures authentication alignment - lecturer names and passwords
-            // from the file are accessible for Sign In system validation
-            parsedLecturers.forEach { lecturer ->
-                if (lecturer.password.isNotEmpty()) {
-                    authManager.createOrUpdateLecturerFromImport(
-                        lecturerID = lecturer.lecturerID,
-                        lecturerName = lecturer.lecturerName,
-                        email = lecturer.email,
-                        password = lecturer.password,
-                        departmentIndex = lecturer.departmentIndex
-                    )
-                }
-            }
-
-            // -- SAVE TO ROOM DATABASE: CRITICAL STEP --
-            // Perform transaction: deleteAll() followed by insertAll()
-            // Room Database is the single source of truth
-            viewLifecycleOwner.lifecycleScope.launch {
-                try {
-                    // Batch fetch all existing lecturers for O(1) lookups
-                    val existingLecturers = viewModel.allLecturers.value ?: emptyList()
-                    val existingMap = existingLecturers.associateBy { it.lecturerName }
-
-                    val updatedLecturers = mutableListOf<Lecturer>()
-
-                    for (lecturer in parsedLecturers) {
-                        val existingLecturer = existingMap[lecturer.lecturerName]
-                        if (existingLecturer != null) {
-                            // Update existing lecturer - keep same ID
-                            updatedLecturers.add(
-                                lecturer.copy(
-                                    id = existingLecturer.id,
-                                    lecturerID = existingLecturer.lecturerID
-                                )
-                            )
-                        } else {
-                            // New lecturer
-                            updatedLecturers.add(lecturer)
-                        }
-                    }
-
-                    // Save to Room - this triggers the LiveData observer
-                    // Uses atomic transaction: replaceAll does deleteAll + insertAll
-                    viewModel.replaceAll(parsedCourses, updatedLecturers)
-
-                    // Clear selected file after successful save
-                    selectedFileUri = null
-
-                    Toast.makeText(
-                        requireContext(),
-                        "Imported ${parsedCourses.size} courses and ${parsedLecturers.size} lecturers",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                } catch (e: Exception) {
-                    Toast.makeText(
-                        requireContext(),
-                        "Error saving data: ${e.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-
-            // UI will be updated by the LiveData observer
+            // First check for conflicts with existing data
+            checkAndShowConflictDialog(parsedCourses, parsedLecturers)
         } else {
             Toast.makeText(
                 requireContext(),
@@ -327,6 +341,182 @@ class DataFragment : Fragment() {
                 Toast.LENGTH_SHORT
             ).show()
         }
+    }
+
+    /**
+     * Checks for conflicts with existing data and shows a dialog if conflicts exist.
+     * Allows user to choose "Overwrite" or "Keep" existing data.
+     */
+    private fun checkAndShowConflictDialog(
+        parsedCourses: List<Course>,
+        parsedLecturers: List<Lecturer>
+    ) {
+        val existingCourses = viewModel.allCourses.value ?: emptyList()
+        val existingLecturers = viewModel.allLecturers.value ?: emptyList()
+        
+        val conflicts = ConflictManager.getAllConflicts(
+            existingCourses, parsedCourses,
+            existingLecturers, parsedLecturers
+        )
+        
+        if (conflicts.isEmpty()) {
+            // No conflicts - proceed directly with import
+            saveImportedData(parsedCourses, parsedLecturers)
+        } else {
+            // Show conflict dialog
+            showConflictDialog(conflicts) { overwrite ->
+                if (overwrite) {
+                    // Proceed with import (overwrite mode)
+                    saveImportedData(parsedCourses, parsedLecturers)
+                } else {
+                    // Keep existing data - filter out conflicting items
+                    val filteredCourses = filterOutConflictingCourses(parsedCourses, existingCourses)
+                    val filteredLecturers = filterOutConflictingLecturers(parsedLecturers, existingLecturers)
+                    saveImportedData(filteredCourses, filteredLecturers)
+                }
+            }
+        }
+    }
+
+    /**
+     * Shows a dialog listing all conflicts and asks user to choose Overwrite or Keep.
+     */
+    private fun showConflictDialog(
+        conflicts: List<ImportConflict>,
+        onChoice: (overwrite: Boolean) -> Unit
+    ) {
+        val conflictDescriptions = conflicts.map { it.description }
+        val message = buildString {
+            append("Found ${conflicts.size} conflict(s):\n\n")
+            conflictDescriptions.take(5).forEach { append("• $it\n") }
+            if (conflicts.size > 5) {
+                append("...and ${conflicts.size - 5} more")
+            }
+        }
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("Data Conflict Detected")
+            .setMessage(message)
+            .setPositiveButton("Overwrite") { _, _ ->
+                onChoice(true)
+            }
+            .setNegativeButton("Keep Existing") { _, _ ->
+                onChoice(false)
+            }
+            .setNeutralButton("Cancel") { dialog, _ ->
+                dialog.dismiss()
+                // Clear selected file on cancel
+                selectedFileUri = null
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    /**
+     * Filters out courses that would conflict with existing data.
+     */
+    private fun filterOutConflictingCourses(
+        newCourses: List<Course>,
+        existingCourses: List<Course>
+    ): List<Course> {
+        val existingKeys = existingCourses.map { 
+            "${it.departmentIndex}_${it.dayIndex}_${it.timeSlotIndex}" 
+        }.toSet()
+        
+        return newCourses.filter { course ->
+            val key = "${course.departmentIndex}_${course.dayIndex}_${course.timeSlotIndex}"
+            key !in existingKeys
+        }
+    }
+
+    /**
+     * Filters out lecturers that would conflict with existing data.
+     */
+    private fun filterOutConflictingLecturers(
+        newLecturers: List<Lecturer>,
+        existingLecturers: List<Lecturer>
+    ): List<Lecturer> {
+        val existingNames = existingLecturers.map { 
+            it.lecturerName.lowercase() 
+        }.toSet()
+        
+        return newLecturers.filter { lecturer ->
+            lecturer.lecturerName.lowercase() !in existingNames
+        }
+    }
+
+    /**
+     * Saves the imported data to the database.
+     * This is called after conflict resolution.
+     */
+    private fun saveImportedData(
+        parsedCourses: List<Course>,
+        parsedLecturers: List<Lecturer>
+    ) {
+        // Create users for imported lecturers with their passwords
+        // This ensures authentication alignment - lecturer names and passwords
+        // from the file are accessible for Sign In system validation
+        parsedLecturers.forEach { lecturer ->
+            if (lecturer.password.isNotEmpty()) {
+                authManager.createOrUpdateLecturerFromImport(
+                    lecturerID = lecturer.lecturerID,
+                    lecturerName = lecturer.lecturerName,
+                    email = lecturer.email,
+                    password = lecturer.password,
+                    departmentIndex = lecturer.departmentIndex
+                )
+            }
+        }
+
+        // -- SAVE TO ROOM DATABASE: CRITICAL STEP --
+        // Perform transaction: deleteAll() followed by insertAll()
+        // Room Database is the single source of truth
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                // Batch fetch all existing lecturers for O(1) lookups
+                val existingLecturers = viewModel.allLecturers.value ?: emptyList()
+                val existingMap = existingLecturers.associateBy { it.lecturerName }
+
+                val updatedLecturers = mutableListOf<Lecturer>()
+
+                for (lecturer in parsedLecturers) {
+                    val existingLecturer = existingMap[lecturer.lecturerName]
+                    if (existingLecturer != null) {
+                        // Update existing lecturer - keep same ID
+                        updatedLecturers.add(
+                            lecturer.copy(
+                                id = existingLecturer.id,
+                                lecturerID = existingLecturer.lecturerID
+                            )
+                        )
+                    } else {
+                        // New lecturer
+                        updatedLecturers.add(lecturer)
+                    }
+                }
+
+                // Save to Room - this triggers the LiveData observer
+                // Uses atomic transaction: replaceAll does deleteAll + insertAll
+                viewModel.replaceAll(parsedCourses, updatedLecturers)
+
+                // Clear selected file after successful save
+                selectedFileUri = null
+
+                Toast.makeText(
+                    requireContext(),
+                    "Imported ${parsedCourses.size} courses and ${parsedLecturers.size} lecturers",
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(
+                    requireContext(),
+                    "Error saving data: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
+        // UI will be updated by the LiveData observer
     }
 
     /**
@@ -478,36 +668,136 @@ class DataFragment : Fragment() {
         _binding = null
     }
 
-    // -- Lecturer Adapter using item_lecturer_profile.xml --
+    // -- Lecturer Card Adapter (main list) --
 
-    private class LecturerListAdapter : RecyclerView.Adapter<LecturerListAdapter.ViewHolder>() {
+    /**
+     * Displays Lecturer Cards in the main RecyclerView.
+     * Each card shows the lecturer's full name and course count.
+     * Tapping a card triggers the detail BottomSheet.
+     */
+    private class LecturerCardAdapter(
+        private val onItemClick: (LecturerWithCourses) -> Unit
+    ) : RecyclerView.Adapter<LecturerCardAdapter.ViewHolder>() {
 
-        private var lecturers = listOf<Lecturer>()
+        private var items = listOf<LecturerWithCourses>()
 
-        fun submitList(newList: List<Lecturer>) {
-            lecturers = newList
+        fun submitList(newList: List<LecturerWithCourses>) {
+            items = newList
             notifyDataSetChanged()
         }
 
         class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             val ivProfileImage: ShapeableImageView = view.findViewById(R.id.ivProfileImage)
             val tvLecturerName: TextView = view.findViewById(R.id.tvLecturerName)
-            val tvCourseCode: TextView = view.findViewById(R.id.tvCourseCode)
+            val tvCourseCount: TextView = view.findViewById(R.id.tvCourseCount)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-            // Use item_lecturer_profile.xml for circular image + name design
             val view = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_lecturer_profile, parent, false)
+                .inflate(R.layout.item_lecturer_card, parent, false)
             return ViewHolder(view)
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            val lecturer = lecturers[position]
-            holder.tvLecturerName.text = lecturer.lecturerName
-            holder.tvCourseCode.text = if (lecturer.courseCode.isNotEmpty()) lecturer.courseCode else lecturer.email
+            val item = items[position]
+            holder.tvLecturerName.text = item.lecturer.lecturerName
+            val count = item.courses.size
+            holder.tvCourseCount.text = if (count == 1) "1 course" else "$count courses"
+            holder.itemView.setOnClickListener { onItemClick(item) }
         }
 
-        override fun getItemCount(): Int = lecturers.size
+        override fun getItemCount(): Int = items.size
+    }
+
+    // -- Course Detail Adapter (inside BottomSheet) --
+
+    /**
+     * Displays course rows inside the Lecturer Detail BottomSheet.
+     * Shows course code chip + course name for each assigned course.
+     */
+    private class CourseDetailAdapter(
+        private val courses: List<Course>
+    ) : RecyclerView.Adapter<CourseDetailAdapter.ViewHolder>() {
+
+        class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+            val tvCourseCode: TextView = view.findViewById(R.id.tvDetailCourseCode)
+            val tvCourseName: TextView = view.findViewById(R.id.tvDetailCourseName)
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+            val view = LayoutInflater.from(parent.context)
+                .inflate(R.layout.item_detail_course, parent, false)
+            return ViewHolder(view)
+        }
+
+        override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+            val course = courses[position]
+            holder.tvCourseCode.text = course.courseCode
+            holder.tvCourseName.text = course.courseName
+        }
+
+        override fun getItemCount(): Int = courses.size
+    }
+    
+    // -- Cloud Sync Methods --
+    
+    /**
+     * Pushes all local data (courses and lecturers) to Firebase Firestore.
+     * This is the "Deduplicate & Push to Cloud" flow for Admin.
+     * Uses FirestoreManager for cloud operations.
+     */
+    private fun pushDataToCloud() {
+        // Get current data from ViewModel
+        val courses = viewModel.allCourses.value
+        val lecturers = viewModel.allLecturers.value
+        
+        if (courses.isNullOrEmpty()) {
+            Toast.makeText(
+                requireContext(),
+                "No data to push to cloud",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+        
+        // Show progress
+        binding.btnPushToCloud.isEnabled = false
+        binding.tvCloudStatus.text = "Pushing to cloud..."
+        
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                // Push to cloud - this implements the "Excel Append Logic" (Deduplicate & Push)
+                // The FirestoreManager uses SetOptions.merge() which handles deduplication
+                val success = firestoreManager.pushAllToCloud(
+                    courses = courses,
+                    lecturers = lecturers ?: emptyList()
+                )
+                
+                if (success) {
+                    Toast.makeText(
+                        requireContext(),
+                        "Successfully pushed ${courses.size} courses to cloud",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    binding.tvCloudStatus.text = "Synced to cloud"
+                } else {
+                    Toast.makeText(
+                        requireContext(),
+                        "Failed to push to cloud. Check Firebase configuration.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    binding.tvCloudStatus.text = "Cloud sync failed"
+                }
+            } catch (e: Exception) {
+                Toast.makeText(
+                    requireContext(),
+                    "Error pushing to cloud: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+                binding.tvCloudStatus.text = "Cloud sync error"
+            } finally {
+                binding.btnPushToCloud.isEnabled = true
+            }
+        }
     }
 }

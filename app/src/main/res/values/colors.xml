@@ -1,16 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- University Navy Blue scale -->
-    <color name="navy_900">#0D174E</color>  <!-- Darkest — status bar -->
-    <color name="navy_800">#1A237E</color>  <!-- Primary -->
-    <color name="navy_600">#283593</color>  <!-- Primary variant -->
-    <color name="navy_400">#5C6BC0</color>  <!-- Secondary / accent -->
-    <color name="navy_200">#9FA8DA</color>  <!-- Subtle tint -->
+    <!-- Brand Teal — spec §4: primary color #00c4cc -->
+    <color name="brand_500">#00c4cc</color>  <!-- Primary -->
+    <color name="brand_700">#009da3</color>  <!-- Primary variant / dark -->
+    <color name="brand_300">#4dd9de</color>  <!-- Light variant -->
+    <color name="brand_900">#007a7f</color>  <!-- Darkest — status bar -->
+    <color name="brand_100">#b2efee</color>  <!-- Subtle tint -->
 
     <!-- Neutral grey scale -->
     <color name="grey_50">#FAFAFA</color>
     <color name="grey_100">#F5F5F5</color>  <!-- Window / page background -->
     <color name="grey_300">#E0E0E0</color>  <!-- Dividers -->
+    <color name="grey_400">#BDBDBD</color>  <!-- Borders -->
+    <color name="grey_600">#757575</color>  <!-- Grey 600 -->
     <color name="grey_700">#616161</color>  <!-- Secondary text -->
     <color name="grey_900">#212121</color>  <!-- Primary text -->
 
@@ -18,4 +20,18 @@
     <color name="white">#FFFFFFFF</color>
     <color name="black">#FF000000</color>
     <color name="error_red">#B00020</color>
+    <color name="warning_amber">#FFA000</color>      <!-- First-login warning banner -->
+    <color name="warning_amber_bg">#FFF8E1</color>   <!-- Warning background -->
+    
+    <!-- Availability status colors -->
+    <color name="teal_200">#80CBC4</color>    <!-- Available status -->
+    <color name="teal_500">#009688</color>    <!-- Teal 500 -->
+    <color name="red_200">#EF9A9A</color>    <!-- Busy/Unavailable status -->
+
+    <!-- Backwards-compatible aliases (old navy names → new brand teal) -->
+    <color name="navy_900">@color/brand_900</color>
+    <color name="navy_800">@color/brand_500</color>
+    <color name="navy_600">@color/brand_700</color>
+    <color name="navy_400">@color/brand_300</color>
+    <color name="navy_200">@color/brand_100</color>
 </resources>

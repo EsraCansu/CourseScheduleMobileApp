@@ -7,4 +7,6 @@ plugins {
     id("com.google.devtools.ksp") version "2.0.21-1.0.28" apply false
     // Safe Args version must match the Navigation library version.
     id("androidx.navigation.safeargs.kotlin") version "2.8.5" apply false
+    // Google Services plugin for Firebase
+    id("com.google.gms.google-services") version "4.4.2" apply false
 }

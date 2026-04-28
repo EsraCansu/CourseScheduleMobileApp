@@ -5,16 +5,16 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:padding="24dp"
-    android:background="@color/grey_100">
+    android:background="?android:colorBackground">
 
-    <!-- Guest View (not logged in) -->
+    <!-- Guest View (not logged in) - visible by default since app starts as Guest -->
     <LinearLayout
         android:id="@+id/layoutGuest"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:gravity="center"
-        android:visibility="gone"
+        android:visibility="visible"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -26,7 +26,7 @@
             android:text="@string/welcome_to_app"
             android:textSize="24sp"
             android:textStyle="bold"
-            android:textColor="@color/navy_800" />
+            android:textColor="?colorPrimary" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSignIn"
@@ -35,7 +35,7 @@
             android:layout_marginTop="32dp"
             android:text="@string/btn_sign_in_prompt"
             android:textSize="16sp"
-            app:backgroundTint="@color/navy_800" />
+            app:backgroundTint="?colorPrimary" />
 
     </LinearLayout>
 
@@ -45,18 +45,40 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:visibility="visible">
+        android:visibility="gone">
 
-        <!-- Welcome Header -->
-        <TextView
-            android:id="@+id/tvWelcome"
-            android:layout_width="wrap_content"
+        <!-- Welcome Header Row (Name + Logout) -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/welcome_guest"
-            android:textSize="26sp"
-            android:textStyle="bold"
-            android:textColor="@color/navy_800"
-            android:layout_marginTop="16dp" />
+            android:orientation="horizontal"
+            android:layout_marginTop="16dp"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/tvWelcome"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/welcome_guest"
+                android:textSize="26sp"
+                android:textStyle="bold"
+                android:textColor="?colorPrimary" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnLogout"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:text="@string/btn_logout"
+                android:textSize="12sp"
+                app:strokeColor="?colorPrimary"
+                android:textColor="?colorPrimary"
+                app:icon="@android:drawable/ic_menu_close_clear_cancel"
+                app:iconTint="?colorPrimary"
+                app:iconSize="16dp" />
+
+        </LinearLayout>
 
         <!-- Department display -->
         <TextView
@@ -74,6 +96,47 @@
             android:textSize="14sp"
             android:layout_marginTop="4dp"
             android:textColor="@color/grey_700" />
+
+        <!-- First Login Warning Banner (spec §3.1) -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardFirstLoginWarning"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:visibility="gone"
+            app:cardBackgroundColor="@color/warning_amber_bg"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="1dp"
+            app:strokeColor="@color/warning_amber"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="12dp"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:text="⚠️"
+                    android:textSize="16sp"
+                    android:gravity="center" />
+
+                <TextView
+                    android:id="@+id/tvFirstLoginWarning"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/warning_first_login"
+                    android:textSize="13sp"
+                    android:textColor="@color/grey_900" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
 
         <!-- Admin Dashboard Card -->
         <com.google.android.material.card.MaterialCardView
@@ -97,7 +160,7 @@
                     android:text="@string/admin_dashboard"
                     android:textSize="18sp"
                     android:textStyle="bold"
-                    android:textColor="@color/navy_800" />
+                    android:textColor="?colorPrimary" />
 
                 <TextView
                     android:id="@+id/tvTotalLecturers"
@@ -133,7 +196,7 @@
                 android:text="@string/your_courses"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="@color/navy_800" />
+                android:textColor="?colorPrimary" />
 
             <TextView
                 android:id="@+id/tvNoCourses"

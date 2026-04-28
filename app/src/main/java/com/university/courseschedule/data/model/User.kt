@@ -8,17 +8,19 @@ import java.util.UUID
  * @property id          Universally unique identifier, generated once on first registration.
  * @property name        First name.
  * @property surname     Last name.
+ * @property email       Email address for authentication and communication.
  * @property department  The user's department.
  * @property role        ADMIN can view/manage all departments; LECTURER sees only their own courses.
- * @property isRegistered  False until the user completes the Settings form for the first time.
+ * @property isFirstLogin True until the user changes their temporary password (spec §2A).
  */
 data class User(
     val id: String = UUID.randomUUID().toString(),
     val name: String = "",
     val surname: String = "",
+    val email: String = "",
     val department: Department = Department.COMPUTER,
     val role: Role = Role.LECTURER,
-    val isRegistered: Boolean = false
+    val isFirstLogin: Boolean = true
 ) {
     /** Returns the formatted display name: "Name Surname" */
     val fullName: String get() = "$name $surname".trim()

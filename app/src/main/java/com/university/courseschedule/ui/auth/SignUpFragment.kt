@@ -6,14 +6,21 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.Toast
-import androidx.fragment.app.Fragment
-import androidx.navigation.fragment.findNavController
+import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.university.courseschedule.R
 import com.university.courseschedule.data.AuthManager
 import com.university.courseschedule.data.model.Department
 import com.university.courseschedule.databinding.FragmentSignupBinding
+import com.university.courseschedule.ui.auth.SignInFragment
 
-class SignUpFragment : Fragment() {
+/**
+ * SignUpSheet - A dismissible BottomSheetDialogFragment for user registration.
+ * Spec requirement: "SignInSheet: A dismissible BottomSheetDialogFragment"
+ */
+class SignUpFragment : BottomSheetDialogFragment() {
+    companion object {
+        const val TAG = "SignUpSheet"
+    }
 
     private var _binding: FragmentSignupBinding? = null
     private val binding get() = _binding!!
@@ -63,8 +70,10 @@ class SignUpFragment : Fragment() {
         }
 
         binding.tvSignIn.setOnClickListener {
-            // Navigate back to SignIn
-            findNavController().popBackStack()
+            // Dismiss this sheet and show SignIn
+            dismiss()
+            val signInSheet = SignInFragment()
+            signInSheet.show(parentFragmentManager, SignInFragment.TAG)
         }
     }
 
@@ -123,15 +132,20 @@ class SignUpFragment : Fragment() {
 
         if (success) {
             // Auto-login after successful registration for better UX
-            val user = authManager.signIn(email, password, role)
+            // Role is derived from stored user data
+            val user = authManager.signIn(email, password)
             if (user != null) {
                 authManager.setCurrentUserId(user.id)
                 Toast.makeText(requireContext(), getString(R.string.welcome_message, user.fullName), Toast.LENGTH_SHORT).show()
-                // Navigate to Home
-                findNavController().navigate(R.id.action_signInFragment_to_homeFragment)
+                // Dismiss all bottom sheets and return to Home
+                dismiss()
+                // The parent fragment (HomeFragment) will refresh on resume
             } else {
                 Toast.makeText(requireContext(), "Registration successful! Please sign in.", Toast.LENGTH_SHORT).show()
-                findNavController().popBackStack()
+                // Dismiss and show SignIn
+                dismiss()
+                val signInSheet = SignInFragment()
+                signInSheet.show(parentFragmentManager, SignInFragment.TAG)
             }
         } else {
             Toast.makeText(requireContext(), getString(R.string.error_email_exists), Toast.LENGTH_SHORT).show()

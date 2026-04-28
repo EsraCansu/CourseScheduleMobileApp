@@ -11,9 +11,6 @@ import androidx.navigation.ui.setupWithNavController
 import com.university.courseschedule.data.AuthManager
 import com.university.courseschedule.databinding.ActivityMainBinding
 import com.university.courseschedule.data.model.Role
-import com.university.courseschedule.ui.home.HomeFragment.Companion.KEY_IS_REGISTERED
-import com.university.courseschedule.ui.home.HomeFragment.Companion.KEY_ROLE
-import com.university.courseschedule.ui.home.HomeFragment.Companion.PREFS_NAME
 
 class MainActivity : AppCompatActivity() {
 
@@ -40,12 +37,9 @@ class MainActivity : AppCompatActivity() {
         // stays in sync after the user saves their profile in Settings.
         navController.addOnDestinationChangedListener { _, destination, _ ->
             applyRoleBasedNavVisibility()
-            
-            // Check if user is logged in when navigating to home
-            if (destination.id == R.id.homeFragment && !authManager.isLoggedIn()) {
-                // User not logged in - navigate to SignIn
-                navController.navigate(R.id.action_homeFragment_to_signInFragment)
-            }
+            // Note: Do NOT auto-redirect guests from Home to SignIn.
+            // HomeFragment handles showing the Guest UI when not logged in.
+            // Auto-redirecting breaks the Guest View requirement (spec §3.1).
         }
     }
 
@@ -53,7 +47,8 @@ class MainActivity : AppCompatActivity() {
      * Enforces role-based tab visibility on every destination change.
      *
      * ADMIN   — all four tabs visible.
-     * LECTURER — Data and Settings tabs hidden (spec §3 / §6).
+     * LECTURER — only Data tab hidden (spec §3.3: Admin-only).
+     *            Settings tab remains visible so lecturers can manage their profile.
      *
      * Tabs remain in their default (all-visible) state until the user
      * logs in, so the Settings tab is always reachable on first launch.
@@ -61,7 +56,6 @@ class MainActivity : AppCompatActivity() {
     private fun applyRoleBasedNavVisibility() {
         // If not logged in, keep all tabs visible
         if (!authManager.isLoggedIn()) {
-            // Ensure all tabs are visible
             with(binding.bottomNavigationView.menu) {
                 findItem(R.id.dataFragment)?.isVisible = true
                 findItem(R.id.settingsFragment)?.isVisible = true
@@ -73,8 +67,10 @@ class MainActivity : AppCompatActivity() {
         val isLecturer = user?.role == Role.LECTURER
 
         with(binding.bottomNavigationView.menu) {
+            // Only Data tab is Admin-only (spec §3.3)
             findItem(R.id.dataFragment)?.isVisible = !isLecturer
-            findItem(R.id.settingsFragment)?.isVisible = !isLecturer
+            // Settings is available for ALL roles (spec §3.4)
+            findItem(R.id.settingsFragment)?.isVisible = true
         }
     }
 }

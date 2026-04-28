@@ -3,6 +3,7 @@ package com.university.courseschedule.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
+import androidx.lifecycle.MediatorLiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import com.university.courseschedule.data.CourseRepository
@@ -11,6 +12,7 @@ import com.university.courseschedule.data.ScheduleMatrixManager
 import com.university.courseschedule.data.db.AppDatabase
 import com.university.courseschedule.data.model.Course
 import com.university.courseschedule.data.model.Lecturer
+import com.university.courseschedule.data.model.LecturerWithCourses
 import kotlinx.coroutines.launch
 
 /**
@@ -35,6 +37,27 @@ class CourseViewModel(app: Application) : AndroidViewModel(app) {
 
     /** All lecturers — observed by DataFragment for lecturer list. */
     val allLecturers: LiveData<List<Lecturer>> = lecturerRepository.allLecturers
+
+    /**
+     * Grouped view: each Lecturer with their assigned Courses.
+     * Merges allLecturers + allCourses reactively via MediatorLiveData.
+     * Each lecturer appears only once, even if they teach multiple courses.
+     */
+    val lecturersWithCourses: LiveData<List<LecturerWithCourses>> = MediatorLiveData<List<LecturerWithCourses>>().apply {
+        fun merge() {
+            val lecturers = allLecturers.value ?: emptyList()
+            val courses = allCourses.value ?: emptyList()
+            val coursesByLecturer = courses.groupBy { it.lecturerName }
+            value = lecturers.map { lecturer ->
+                LecturerWithCourses(
+                    lecturer = lecturer,
+                    courses = coursesByLecturer[lecturer.lecturerName] ?: emptyList()
+                )
+            }
+        }
+        addSource(allLecturers) { merge() }
+        addSource(allCourses) { merge() }
+    }
 
     /** Tracks whether data has been imported and processed. */
     private val _isDataImported = MutableLiveData(false)
