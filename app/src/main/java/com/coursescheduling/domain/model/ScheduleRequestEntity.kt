@@ -5,14 +5,13 @@ import androidx.room.PrimaryKey
 
 @Entity(tableName = "schedule_requests")
 data class ScheduleRequestEntity(
-    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    @PrimaryKey(autoGenerate = true) val requestId: Int = 0,
     val lecturerId: String,
     val lecturerName: String,
-    val dayIndex: Int,
-    val slotIndex: Int,
-    val originalCourseId: Int?,
-    val reason: String,
-    val desiredChange: String,
-    val status: String = "Pending", // Pending, Approved, Rejected
+    val weekday: Int, // dayIndex
+    val timeSlot: Int, // slotIndex
+    val note: String,
+    val requestType: String, // "Schedule Change" or "Override"
+    val status: String = "PENDING",
     val createdAt: Long = System.currentTimeMillis()
 )

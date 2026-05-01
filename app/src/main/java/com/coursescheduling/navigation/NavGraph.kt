@@ -1,10 +1,12 @@
 package com.coursescheduling.navigation
 
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import android.widget.Toast
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Badge
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -34,6 +36,7 @@ import com.coursescheduling.presentation.components.ImportConflictDialog
 import com.coursescheduling.presentation.components.MissingFieldsResolutionDialog
 import com.coursescheduling.data.ImportResolution
 import kotlinx.coroutines.launch
+import com.coursescheduling.navigation.RequestListSection
 
 data class NavTab(
     val screen: Screen,
@@ -97,6 +100,15 @@ fun CourseScheduleApp() {
         }
     }
 
+    val uiState by courseViewModel.uiState.collectAsState()
+
+    LaunchedEffect(uiState) {
+        if (uiState is UiState.Error) {
+            Toast.makeText(context, (uiState as UiState.Error).message, Toast.LENGTH_SHORT).show()
+            courseViewModel.clearError()
+        }
+    }
+
     Scaffold(
         bottomBar = {
             if (showBottomBar) {
@@ -106,8 +118,21 @@ fun CourseScheduleApp() {
                             it.route == tab.screen.route
                         } == true
 
+                        val allRequests by courseViewModel.allRequests.collectAsState()
+                        val pendingCount = allRequests.count { it.status == "PENDING" }
+
                         NavigationBarItem(
-                            icon = { Icon(tab.icon, contentDescription = tab.label) },
+                            icon = { 
+                                BadgedBox(
+                                    badge = {
+                                        if (tab.screen == Screen.Calendar && userRole == Role.ADMIN && pendingCount > 0) {
+                                            Badge { Text(pendingCount.toString()) }
+                                        }
+                                    }
+                                ) {
+                                    Icon(tab.icon, contentDescription = tab.label)
+                                }
+                            },
                             label = { Text(tab.label) },
                             selected = selected,
                             onClick = {
@@ -217,14 +242,45 @@ fun CourseScheduleApp() {
             }
 
             composable(Screen.Calendar.route) { 
+                LaunchedEffect(Unit) {
+                    courseViewModel.setCalendarLecturer(null)
+                    courseViewModel.observeRequests()
+                }
+                val calState by courseViewModel.calendarUiState.collectAsState()
+                val allRequests by courseViewModel.allRequests.collectAsState()
+                
+                Column {
+                    if (userRole == Role.ADMIN) {
+                        RequestListSection(
+                            requests = allRequests.filter { it.status == "PENDING" },
+                            onAction = { req, approve -> courseViewModel.handleRequestAction(req, approve) }
+                        )
+                    }
+                    CalendarScreen(
+                        uiState = calState, 
+                        onSlotToggle = { day, slot -> courseViewModel.onSlotToggle(day, slot) },
+                        onSaveAvailability = { courseViewModel.saveAvailability() },
+                        onRequestChange = { day, slot, note, type ->
+                            courseViewModel.submitScheduleRequest(day, slot, note, type)
+                        }
+                    ) 
+                }
+            }
+
+            composable(Screen.LecturerCalendar.route) { backStackEntry ->
+                val lecturerId = backStackEntry.arguments?.getString("lecturerId")
+                LaunchedEffect(lecturerId) {
+                    courseViewModel.setCalendarLecturer(lecturerId)
+                }
                 val calState by courseViewModel.calendarUiState.collectAsState()
                 CalendarScreen(
-                    uiState = calState, 
-                    onSlotToggle = {_,_ ->},
-                    onRequestChange = { day, slot, reason, desired ->
-                        courseViewModel.submitScheduleRequest(day, slot, reason, desired)
+                    uiState = calState,
+                    onSlotToggle = { day, slot -> courseViewModel.onSlotToggle(day, slot) },
+                    onSaveAvailability = { courseViewModel.saveAvailability() },
+                    onRequestChange = { day, slot, note, type ->
+                        courseViewModel.submitScheduleRequest(day, slot, note, type)
                     }
-                ) 
+                )
             }
 
             composable(Screen.Data.route) { 
@@ -240,7 +296,9 @@ fun CourseScheduleApp() {
                     ),
                     onImportClick = { /* FAB handles this internally */ },
                     onPushToCloudClick = { /* Not applicable in local-only */ },
-                    onLecturerCalendarClick = { id -> /* Navigate to calendar with ID */ },
+                    onLecturerCalendarClick = { id -> 
+                        navController.navigate(Screen.LecturerCalendar.createRoute(id))
+                    },
                     onSnackbarDismiss = { /* courseViewModel.clearMessage() */ },
                     onImportFile = { uri ->
                         courseViewModel.parseImportFile(context, uri)

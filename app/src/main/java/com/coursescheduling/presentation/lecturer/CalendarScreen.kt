@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -29,7 +31,8 @@ enum class SlotState { AVAILABLE, UNAVAILABLE, OCCUPIED }
 data class CalendarUiState(
     val slots: Map<Pair<Int, Int>, SlotState> = emptyMap(), // (dayIndex, slotIndex) → state
     val occupiedCourses: Map<Pair<Int, Int>, Course?> = emptyMap(),
-    val isLecturerMode: Boolean = true
+    val isLecturerMode: Boolean = true,
+    val canEdit: Boolean = false
 )
 
 private val DAYS = listOf("Mon", "Tue", "Wed", "Thu", "Fri")
@@ -50,29 +53,53 @@ private val TIME_SLOTS = listOf(
 fun CalendarScreen(
     uiState: CalendarUiState,
     onSlotToggle: (dayIndex: Int, slotIndex: Int) -> Unit,
-    onRequestChange: (dayIndex: Int, slotIndex: Int, reason: String, desired: String) -> Unit = {_,_,_,_ ->},
+    onSaveAvailability: () -> Unit = {},
+    onRequestChange: (dayIndex: Int, slotIndex: Int, note: String, type: String) -> Unit = {_,_,_,_ ->},
     modifier: Modifier = Modifier
 ) {
     var showRequestDialog by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
     if (showRequestDialog != null) {
-        var reason by remember { mutableStateOf("") }
-        var desired by remember { mutableStateOf("") }
+        var note by remember { mutableStateOf("") }
+        var requestType by remember { mutableStateOf("Schedule Change") }
+        val dayName = DAYS[showRequestDialog!!.first]
+        val slotTime = TIME_SLOTS[showRequestDialog!!.second].replace("\n", " - ")
+
         AlertDialog(
             onDismissRequest = { showRequestDialog = null },
-            title = { Text("Request Schedule Change") },
+            title = { Text("New Request") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Day: ${DAYS[showRequestDialog!!.first]}, Slot: ${TIME_SLOTS[showRequestDialog!!.second].replace("\n", " - ")}")
-                    OutlinedTextField(value = reason, onValueChange = { reason = it }, label = { Text("Reason (optional)") })
-                    OutlinedTextField(value = desired, onValueChange = { desired = it }, label = { Text("Desired Slot / Change") })
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Slot: $dayName, $slotTime", fontWeight = FontWeight.SemiBold)
+                    
+                    Text("Request Type", style = MaterialTheme.typography.labelMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = requestType == "Schedule Change",
+                            onClick = { requestType = "Schedule Change" },
+                            label = { Text("Schedule Change") }
+                        )
+                        FilterChip(
+                            selected = requestType == "Override",
+                            onClick = { requestType = "Override" },
+                            label = { Text("Override") }
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = note,
+                        onValueChange = { note = it },
+                        label = { Text("Note / Reason") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2
+                    )
                 }
             },
             confirmButton = {
                 Button(onClick = {
-                    onRequestChange(showRequestDialog!!.first, showRequestDialog!!.second, reason, desired)
+                    onRequestChange(showRequestDialog!!.first, showRequestDialog!!.second, note, requestType)
                     showRequestDialog = null
-                }) { Text("Submit") }
+                }) { Text("Submit Request") }
             },
             dismissButton = { TextButton(onClick = { showRequestDialog = null }) { Text("Cancel") } }
         )
@@ -85,21 +112,40 @@ fun CalendarScreen(
             .padding(16.dp)
     ) {
         // Header
-        Text(
-            text = if (uiState.isLecturerMode) "My Availability" else "Schedule Overview",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = if (uiState.isLecturerMode)
-                "Tap a slot to toggle availability"
-            else
-                "View current schedule",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = if (uiState.isLecturerMode) "My Availability" else "Schedule Overview",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    text = if (uiState.isLecturerMode)
+                        "Tap to toggle, Long press to request"
+                    else
+                        "View lecturer's calendar",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (uiState.canEdit) {
+                Button(
+                    onClick = onSaveAvailability,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Save", fontSize = 14.sp)
+                }
+            }
+        }
 
         Spacer(Modifier.height(16.dp))
 
@@ -179,13 +225,13 @@ fun CalendarScreen(
                                      } else {
                                          expandedCell = key
                                      }
-                                     // Still allow toggle if lecturer mode and not occupied
-                                     if (uiState.isLecturerMode && state != SlotState.OCCUPIED) {
+                                     // Call toggle regardless of occupied state so VM can handle blocking + Toast
+                                     if (uiState.canEdit) {
                                          onSlotToggle(dayIndex, slotIndex)
                                      }
                                  },
                                  onLongClick = {
-                                     if (uiState.isLecturerMode) {
+                                     if (uiState.canEdit) {
                                          showRequestDialog = key
                                      }
                                  },

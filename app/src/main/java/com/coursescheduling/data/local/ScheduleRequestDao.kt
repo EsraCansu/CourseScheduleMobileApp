@@ -22,6 +22,6 @@ interface ScheduleRequestDao {
     @Update
     suspend fun updateRequest(request: ScheduleRequestEntity)
 
-    @Query("DELETE FROM schedule_requests WHERE id = :id")
-    suspend fun deleteRequest(id: Int)
+    @Query("DELETE FROM schedule_requests WHERE requestId = :requestId")
+    suspend fun deleteRequest(requestId: Int)
 }

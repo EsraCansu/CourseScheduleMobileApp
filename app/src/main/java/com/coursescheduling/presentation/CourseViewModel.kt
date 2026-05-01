@@ -16,6 +16,8 @@ import com.coursescheduling.data.ImportResolution
 import com.coursescheduling.domain.model.Course
 import com.coursescheduling.domain.model.LecturerEntity
 import com.coursescheduling.domain.model.LecturerWithCourses
+import com.coursescheduling.domain.model.AvailabilityEntity
+import com.coursescheduling.domain.model.ScheduleRequestEntity
 import com.coursescheduling.domain.model.ScheduleEntity
 import com.coursescheduling.domain.model.DepartmentEntity
 import kotlinx.coroutines.CancellationException
@@ -49,51 +51,150 @@ class CourseViewModel(app: Application) : AndroidViewModel(app) {
     private val _calendarUiState = MutableStateFlow(CalendarUiState())
     val calendarUiState: StateFlow<CalendarUiState> = _calendarUiState.asStateFlow()
 
+    private val _tempAvailability = MutableStateFlow<Map<Pair<Int, Int>, Boolean>>(emptyMap())
+    val tempAvailability: StateFlow<Map<Pair<Int, Int>, Boolean>> = _tempAvailability.asStateFlow()
+
+    private val _currentCalendarLecturerId = MutableStateFlow<String?>(null)
+    val currentCalendarLecturerId: StateFlow<String?> = _currentCalendarLecturerId.asStateFlow()
+
     init {
         observeData()
     }
 
     private fun observeData() {
         viewModelScope.launch {
-            combine(
+            val baseFlow = combine(
                 courseRepository.observeCourses(),
                 lecturerRepository.observeLecturers(),
                 db.scheduleDao().getAllSchedulesFlow(),
+                db.availabilityDao().getAllAvailability(),
                 authManager.currentUserFlow
-            ) { courses, lecturers, schedules, user ->
-                Log.d("FINAL_IMPORT_DEBUG", "UI Refresh Triggered: ${courses.size} courses, ${lecturers.size} lecturers in DB")
+            ) { courses, lecturers, schedules, allAvailability, user ->
+                // Intermediate object to pass down
+                DataSnapshot(courses, lecturers, schedules, allAvailability, user)
+            }
+
+            combine(
+                baseFlow,
+                _tempAvailability,
+                _currentCalendarLecturerId
+            ) { snapshot, temp, targetLecturerId ->
+                val (courses, lecturers, schedules, allAvailability, user) = snapshot
+                
+                Log.d("CALENDAR_SYNC_FIX", "admin calendar refresh trigger: Refreshing for user=${user?.fullName}, target=$targetLecturerId")
                 
                 _allCourses.value = courses
                 _allLecturers.value = lecturers
                 
                 // Update matrix
                 syncMatrixWithDatabase(courses)
-                
-                // Update grouped list for Data screen
                 updateGroupedList(lecturers, courses)
                 
-                // Update calendar
+                val targetId = targetLecturerId ?: user?.id ?: ""
+                val isAdmin = user?.role == com.coursescheduling.domain.model.Role.ADMIN
+                val isLecturer = user?.role == com.coursescheduling.domain.model.Role.LECTURER
+                
+                // Mode logic:
+                // If targetLecturerId is set -> show that lecturer's calendar.
+                // If targetLecturerId is null AND user is LECTURER -> show their own.
+                // If targetLecturerId is null AND user is ADMIN -> show ALL (Global Mode).
+                
+                val showAll = isAdmin && targetLecturerId == null
+                val isLecturerMode = targetLecturerId != null || isLecturer
+                
+                // canEdit is true only if the logged-in user is a lecturer and they are NOT viewing someone else's calendar
+                val canEdit = isLecturer && (targetLecturerId == null || targetLecturerId == user?.id)
+                
+                Log.d("CALENDAR_SYNC_FIX", "admin calendar refresh trigger: mode=${if(showAll) "GLOBAL" else "SPECIFIC"}, target=$targetId")
+
                 val slots = mutableMapOf<Pair<Int, Int>, SlotState>()
                 val occupied = mutableMapOf<Pair<Int, Int>, Course?>()
                 
-                val filteredSchedules = if (user?.role == com.coursescheduling.domain.model.Role.ADMIN) {
-                    schedules
-                } else {
-                    schedules.filter { it.lecturerId == user?.id }
+                // 1. Mark Availability from DB (only if showing specific lecturer)
+                if (!showAll) {
+                    allAvailability.filter { it.lecturerId == targetId }.forEach { avail ->
+                        val key = Pair(avail.dayIndex, avail.slotIndex)
+                        slots[key] = if (avail.isAvailable) SlotState.AVAILABLE else SlotState.UNAVAILABLE
+                    }
                 }
-                
+
+                // 2. Override with Temporary Changes (OPTIMISTIC UI)
+                if (!showAll) {
+                    temp.forEach { (key, isAvailable) ->
+                        slots[key] = if (isAvailable) SlotState.AVAILABLE else SlotState.UNAVAILABLE
+                    }
+                }
+
+                // 3. Mark Occupied (Highest Priority)
+                val filteredSchedules = if (showAll) schedules else schedules.filter { it.lecturerId == targetId }
                 filteredSchedules.forEach { schedule ->
                     val key = Pair(schedule.weekday, schedule.timeSlotIndex)
-                    slots[key] = SlotState.OCCUPIED
+                    slots[key] = SlotState.OCCUPIED // Priority Rule: OCCUPIED > UNAVAILABLE > AVAILABLE
                     occupied[key] = courses.find { it.id == schedule.courseId }
                 }
                 
                 _calendarUiState.value = _calendarUiState.value.copy(
                     slots = slots,
-                    occupiedCourses = occupied
+                    occupiedCourses = occupied,
+                    isLecturerMode = isLecturerMode,
+                    canEdit = canEdit
                 )
             }.collect()
         }
+    }
+
+    private data class DataSnapshot(
+        val courses: List<Course>,
+        val lecturers: List<com.coursescheduling.domain.model.LecturerEntity>,
+        val schedules: List<com.coursescheduling.domain.model.ScheduleEntity>,
+        val availability: List<com.coursescheduling.domain.model.AvailabilityEntity>,
+        val user: com.coursescheduling.domain.model.User?
+    )
+
+    fun onSlotToggle(dayIndex: Int, slotIndex: Int) {
+        val key = Pair(dayIndex, slotIndex)
+        val currentState = _calendarUiState.value.slots[key] ?: SlotState.AVAILABLE
+        
+        if (currentState == SlotState.OCCUPIED) {
+            Log.w("CALENDAR_SYNC_FIX", "occupied blocking behavior: day=$dayIndex slot=$slotIndex is OCCUPIED")
+            _uiState.value = UiState.Error("Occupied slot cannot be modified")
+            return
+        }
+
+        val nextAvailable = currentState != SlotState.AVAILABLE
+        val currentTemp = _tempAvailability.value.toMutableMap()
+        currentTemp[key] = nextAvailable
+        _tempAvailability.value = currentTemp
+        Log.d("CALENDAR_SYNC_FIX", "cell tap state change: day=$dayIndex slot=$slotIndex -> ${if(nextAvailable) "AVAILABLE" else "UNAVAILABLE"}")
+    }
+
+    fun saveAvailability() {
+        val user = authManager.currentUserFlow.value ?: return
+        val targetId = _currentCalendarLecturerId.value ?: user.id
+        
+        viewModelScope.launch {
+            try {
+                val entities = _tempAvailability.value.map { (key, isAvailable) ->
+                    AvailabilityEntity(
+                        lecturerId = targetId,
+                        dayIndex = key.first,
+                        slotIndex = key.second,
+                        isAvailable = isAvailable
+                    )
+                }
+                db.availabilityDao().insertAll(entities)
+                _tempAvailability.value = emptyMap()
+                Log.d("CALENDAR_SYNC_FIX", "save operation result: Success for $targetId")
+            } catch (e: Exception) {
+                Log.e("CALENDAR_SYNC_FIX", "save operation result: Failed - ${e.message}")
+            }
+        }
+    }
+
+    fun setCalendarLecturer(lecturerId: String?) {
+        _currentCalendarLecturerId.value = lecturerId
+        _tempAvailability.value = emptyMap() // Reset temp changes when switching
+        Log.d("CALENDAR_SYNC_FIX", "lecturerId sync updates: Viewing calendar for $lecturerId")
     }
 
     fun resetDatabase() {
@@ -498,23 +599,42 @@ class CourseViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun submitScheduleRequest(dayIndex: Int, slotIndex: Int, reason: String, desiredChange: String) {
+    fun submitScheduleRequest(dayIndex: Int, slotIndex: Int, note: String, type: String) {
         val user = authManager.currentUserFlow.value ?: return
         viewModelScope.launch {
             try {
-                val request = com.coursescheduling.domain.model.ScheduleRequestEntity(
+                val request = ScheduleRequestEntity(
                     lecturerId = user.id,
                     lecturerName = user.fullName,
-                    dayIndex = dayIndex,
-                    slotIndex = slotIndex,
-                    originalCourseId = null, // Can be refined to find the course at this slot
-                    reason = reason,
-                    desiredChange = desiredChange
+                    weekday = dayIndex,
+                    timeSlot = slotIndex,
+                    note = note,
+                    requestType = type,
+                    status = "PENDING"
                 )
                 db.scheduleRequestDao().insert(request)
-                Log.d("FEATURE_FIX_DEBUG", "Schedule request submitted by ${user.fullName} for day $dayIndex slot $slotIndex")
+                Log.d("SAFE_CALENDAR_ENGINE", "request creation: Success - $type for day $dayIndex slot $slotIndex")
             } catch (e: Exception) {
-                Log.e("FEATURE_FIX_DEBUG", "Request submission failed: ${e.message}")
+                Log.e("SAFE_CALENDAR_ENGINE", "request creation: Failed - ${e.message}")
+            }
+        }
+    }
+
+    fun handleRequestAction(request: ScheduleRequestEntity, approve: Boolean) {
+        viewModelScope.launch {
+            try {
+                val newStatus = if (approve) "APPROVED" else "REJECTED"
+                val updated = request.copy(status = newStatus)
+                db.scheduleRequestDao().updateRequest(updated)
+                
+                Log.d("SAFE_CALENDAR_ENGINE", "admin request action: $newStatus for request ${request.requestId}")
+                
+                if (approve) {
+                    // In a real app, you'd update the schedule here.
+                    // For now, we just update the status as requested.
+                }
+            } catch (e: Exception) {
+                Log.e("SAFE_CALENDAR_ENGINE", "admin request action: Failed - ${e.message}")
             }
         }
     }
@@ -531,5 +651,9 @@ class CourseViewModel(app: Application) : AndroidViewModel(app) {
                 db.scheduleRequestDao().getRequestsByLecturer(user.id).collect { _allRequests.value = it }
             }
         }
+    }
+
+    fun clearError() {
+        _uiState.value = UiState.Idle
     }
 }

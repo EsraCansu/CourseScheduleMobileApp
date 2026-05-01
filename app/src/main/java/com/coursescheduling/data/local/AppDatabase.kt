@@ -11,6 +11,7 @@ import com.coursescheduling.domain.model.LecturerEntity
 import com.coursescheduling.domain.model.DepartmentEntity
 import com.coursescheduling.domain.model.ScheduleEntity
 import com.coursescheduling.domain.model.ScheduleRequestEntity
+import com.coursescheduling.domain.model.AvailabilityEntity
 
 @Database(
     entities = [
@@ -18,9 +19,10 @@ import com.coursescheduling.domain.model.ScheduleRequestEntity
         LecturerEntity::class, 
         DepartmentEntity::class, 
         ScheduleEntity::class,
-        ScheduleRequestEntity::class
+        ScheduleRequestEntity::class,
+        AvailabilityEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -30,6 +32,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun departmentDao(): DepartmentDao
     abstract fun scheduleDao(): ScheduleDao
     abstract fun scheduleRequestDao(): ScheduleRequestDao
+    abstract fun availabilityDao(): AvailabilityDao
 
     companion object {
         @Volatile
