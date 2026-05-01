@@ -26,12 +26,71 @@ The project originally existed with:
 
 The project has been partially migrated into Kotlin Jetpack Compose.
 
-Current priority:
+# Current Priority
 
-> Make the app fully runnable and stable in Android Studio before adding advanced features.
+## Phase 1 — Stabilization
 
-UI perfection can come later.
+Goal:
 
+* Project compiles
+* Emulator launches
+* Compose renders
+* Navigation works
+
+---
+
+## Phase 2 — Local Database + Authentication
+
+Goal:
+
+* Room Database
+* Lecturer login
+* Password hashing
+* Session persistence
+* XLSX import → Room
+
+---
+
+## Phase 3 — Navigation + UI Integration
+
+Goal:
+
+* Admin navigation
+* Lecturer navigation
+* Dashboard integration
+* Shared components
+
+---
+
+## Phase 4 — Scheduling Engine
+
+Goal:
+
+* Availability grid
+* Conflict detection
+* Approval workflow
+* Schedule generation
+
+---
+
+## Phase 5 — Firebase Sync (Optional)
+
+Goal:
+
+* Cloud backup
+* Remote sync
+* Multi-device support
+
+---
+
+## Phase 6 — UI Polish & Optimization
+
+Goal:
+
+* Dark mode
+* Animations
+* Performance
+* UX improvements
 ---
 
 # Current Technical Stack
@@ -42,11 +101,21 @@ UI perfection can come later.
 * Jetpack Compose
 * Material Design 3
 
-## Backend
+## Current Backend Strategy
 
-* Firebase Authentication
-* Firebase Firestore
-* Firebase Storage
+Primary Backend:
+
+* Room Database (Offline-first)
+
+Current Development Mode:
+
+* Local-first architecture
+* Firebase temporarily disabled for active development
+* Authentication and scheduling currently operate locally
+
+Future Backend:
+
+* Firebase may be used later for cloud sync and backup
 
 ## Offline
 
@@ -61,6 +130,24 @@ UI perfection can come later.
 * Modular package structure
 
 ---
+
+## Session Management
+
+The system must persist login state locally.
+
+Use:
+
+* SharedPreferences
+* SessionManager
+
+Stored session data:
+
+* userId
+* role
+* loginState
+* mustChangePassword
+* lastLogin
+-------
 
 # Required User Roles
 
@@ -100,6 +187,27 @@ Capabilities:
 * Access settings
 
 ---
+# Lecturer Authentication Rules
+
+Lecturer accounts are generated from imported XLSX data.
+
+Required lecturer authentication fields:
+
+* Email
+* Password
+* Lecturer Name
+* Department
+
+Rules:
+
+* Password must be hashed before storage
+* Plain text password must never be stored
+* First login forces password change
+* Authentication works locally
+* Session persists using SharedPreferences
+* Lecturer credentials are stored in Room Database
+
+-------
 
 # Core Scheduling Rules
 
@@ -122,6 +230,26 @@ Weekdays:
 * Friday
 
 No weekend scheduling.
+----------
+
+# Schedule Approval Workflow
+
+Lecturers may request schedule preferences.
+
+Workflow:
+
+Lecturer Request
+→ Pending
+→ Admin Review
+→ Approved / Rejected
+
+Only approved schedules become active timetable entries.
+
+Request statuses:
+
+* Pending
+* Approved
+* Rejected
 
 ---
 
@@ -143,11 +271,41 @@ Required fields:
 * Course Time
 * Course Duration
 * Classroom Type
+* Email
+* Password
 
 Validation:
 
 * Missing fields → ask admin OR skip row
 * Validate before Firebase insertion
+
+## Smart XLSX Parsing Rules
+
+The import system must support flexible column names.
+
+Rules:
+
+* Case-insensitive parsing
+* Space-insensitive parsing
+* Underscore normalization
+* Flexible header recognition
+
+Examples:
+
+Lecturer Name → lecturerName
+Lecturer → lecturerName
+Instructor → lecturerName
+
+Course Code → courseCode
+Code → courseCode
+CourseCode → courseCode
+
+Unknown columns:
+
+* Must generate warnings
+* Must not crash import system
+
+Import must use header mapping instead of column index positions.
 
 ---
 
@@ -165,6 +323,30 @@ Interaction:
 
 * Tap grid cell to toggle state
 * Weekly calendar structure
+
+## Schedule Time Slot Structure
+
+Weekly timetable must use fixed hourly blocks.
+
+Time slots:
+
+* 08:00–09:00
+* 09:00–10:00
+* 10:00–11:00
+* 11:00–12:00
+* 13:00–14:00
+* 14:00–15:00
+* 15:00–16:00
+* 16:00–17:00
+* 17:00–18:00
+
+Each time block represents one selectable schedule cell.
+
+Grid must support:
+
+* Tap interaction
+* Availability coloring
+* Dynamic expansion for details
 
 ---
 
@@ -447,3 +629,18 @@ A stable Android app that:
 * Supports Admin and Lecturer flow
 * Is ready for Firebase integration
 * Can be safely extended later
+
+---
+
+# Current Development Strategy
+
+Current development prioritizes:
+
+* Stable Android runtime
+* Offline-first architecture
+* Room Database
+* Local authentication
+* XLSX import reliability
+* Emulator stability
+
+Firebase integration is postponed until local system becomes stable.

@@ -48,36 +48,66 @@ Goal: Make project compile, run, and show UI on emulator.
 
 ## Phase 3 — Jetpack Compose Migration
 
-- [ ] Add Compose BOM + Material3 + activity-compose to `app/build.gradle.kts`
-- [ ] Enable `buildFeatures { compose = true }`
-- [ ] Set `composeOptions` Kotlin compiler extension version
-- [ ] Migrate LoginScreen (Compose)
-- [ ] Migrate HomeScreen — Admin dashboard (Compose)
-- [ ] Migrate HomeScreen — Lecturer dashboard (Compose)
-- [ ] Migrate CalendarScreen / Availability Grid (Compose)
-- [ ] Migrate DataScreen / Excel Import (Compose)
-- [ ] Migrate SettingsScreen (Compose)
-- [ ] Replace XML layouts with Compose screens
-- [ ] Replace NavHostFragment with NavHost in Compose
-- [ ] Material Design 3 theme applied globally
+- [x] Add Compose BOM + Material3 + activity-compose to `app/build.gradle.kts` ✅
+- [x] Enable `buildFeatures { compose = true }` ✅
+- [x] Set `composeOptions` Kotlin compiler extension version ✅
+- [x] Migrate LoginScreen (Compose) ✅
+- [x] Migrate HomeScreen — Admin dashboard (Compose) ✅
+- [x] Migrate HomeScreen — Lecturer dashboard (Compose) ✅
+
+- [x] Migrate CalendarScreen / Availability Grid (Compose) ✅
+- [x] Migrate DataScreen / Excel Import (Compose) ✅
+- [x] Migrate SettingsScreen (Compose) ✅
+- [x] Replace XML layouts with Compose screens ✅
+- [x] Replace NavHostFragment with NavHost in Compose ✅
+- [x] Material Design 3 theme applied globally ✅
+
+> **Phase 3 COMPLETE ✅**
 
 ---
 
-## Phase 4 — Firebase Integration
+## Current Session Fixes (UI & Emulator)
 
-- [ ] Firebase Auth replaces SharedPrefs auth
-- [ ] Firebase Auth: Email/Password sign-in
-- [ ] Firebase Auth: Session persistence
-- [ ] Firestore: `users` collection CRUD
-- [ ] Firestore: `lecturers` collection CRUD
-- [ ] Firestore: `departments` collection CRUD
-- [ ] Firestore: `classrooms` collection CRUD
-- [ ] Firestore: `courses` collection CRUD
-- [ ] Firestore: `schedules` collection CRUD
-- [ ] Role assignment enforced via Firestore user document
-- [ ] First-login password change flow (Lecturer)
-- [ ] Admin exempt from first-login password change
-- [ ] Push to Cloud button (Admin only, Data screen)
+- [x] Emulator portrait mode fixed
+- [x] Login screen set as start destination
+- [x] Home screen hidden before authentication
+- [x] Hourly calendar grid implemented
+- [x] Emulator rerun verification completed
+- [x] Runtime crash diagnosis (Root cause: `popUpTo(0)` in `NavGraph.kt`)
+- [x] Firebase validation status (Firebase successfully initialized, Auth is safe)
+- [x] Startup flow validation (Login fallback safely triggers Home screen)
+- [x] Crash resolved confirmation (App successfully runs without closing)
+
+---
+
+## Phase 4 — UI Polish & Advanced Workflows (Week 10)
+
+- [x] Import schema supports approval workflow
+- [x] Data page management structure implemented
+- [x] Lecturer calendar accessible from Data page
+- [x] Expanded calendar detail panel implemented
+- [x] Three-mode theme system implemented
+- [ ] Approval state integrated into schedule system
+- [x] Import validation workflow implemented
+- [x] Duplicate resolution flow added
+- [x] Confirmation-based import added
+- [x] Missing data handling added
+- [x] Import summary preview added
+- [ ] Implement `UiState` sealed class (Idle, Loading, Success, Error with retryable flag)
+- [ ] Update ViewModels to use `StateFlow` and `viewModelScope` (remove LiveData)
+- [ ] Migrate Firestore reads/writes to `Dispatchers.IO` using coroutines
+- [ ] Create Repositories (`CourseRepository`, `LecturerRepository`)
+- [ ] Implement real-time Firestore listeners using `callbackFlow` and `addSnapshotListener`
+- [ ] Handle `CancellationException` properly in all catch blocks
+- [ ] Use Firestore `runTransaction` to handle race conditions safely
+- [ ] Implement parallel data loading using `async`/`await` in ViewModels
+- [x] Map `FirebaseFirestoreException` codes to user-friendly error messages
+- [x] Lecturer password column added ✅
+- [x] Temporary password import implemented ✅
+- [x] Forced password change flow implemented ✅
+- [x] Password hashing implemented ✅
+- [x] Admin password status visibility added ✅
+- [x] First login flow completed ✅
 
 ---
 
@@ -108,10 +138,61 @@ Goal: Make project compile, run, and show UI on emulator.
 
 ---
 
+## Phase 7 — Repository Cleanup & Integrity
+
+- [x] Startup route fixed to Sign In ✅
+- [x] Sign Up button restored ✅
+- [x] ChangePassword blocked from startup ✅
+- [x] Navigation root cause fixed ✅ (Root cause: Redundant LaunchedEffect + Persistent Session)
+- [x] AuthGraph corrected ✅
+- [x] Global Auth Guard implemented ✅
+- [x] Debug logging added to NavGraph ✅
+- [x] Login TextFields editable ✅ (Root cause: Fixed unconnected state lambdas in MainActivity)
+- [x] Keyboard interaction fixed ✅
+- [x] Focus handling fixed ✅
+- [x] Input blocking layer removed ✅
+- [x] Sign In interaction restored ✅
+- [x] Firebase role routing implemented ✅
+- [x] Local emulator-only assumption added ✅
+- [x] Web emulator attempts removed ✅
+- [x] Lecturer onboarding flow corrected ✅
+
+---
+
+## Phase 8 — Architecture Pivot (Local-Only Room) ✅
+Goal: Remove Firebase and migrate to a high-performance, local-only architecture.
+
+- [x] Remove Firebase Firestore/Auth/Storage dependencies ✅
+- [x] Delete `google-services.json` and clean build scripts ✅
+- [x] Migrate `CourseRepository` and `LecturerRepository` to Room ✅
+- [x] Implement atomic transaction-based `replaceAll` in Room ✅
+- [x] Update `CourseViewModel` to read exclusively from local DAOs ✅
+- [x] Fix infinite loading issue by removing network-bound tasks ✅
+- [x] Synchronous local session management via `AuthManager` (SharedPrefs) ✅
+- [x] Verify data persistence across app restarts ✅
+- [x] Support flexible Excel import into local database ✅
+- [x] Secure LecturerEntity with hashed passwords (SHA-256) ✅
+- [x] Robust SessionManager for local persistence ✅
+- [x] Smart email/password column mapping in ImportEngine ✅
+- [x] First-login flow (mustChangePassword) integrated with Room ✅
+- [x] Architecture Reorganized to match project_content.md ✅
+- [x] Package Renamed to com.coursescheduling ✅
+- [x] Course model expanded (approvalStatus, duration, etc.) ✅
+- [x] ImportEngine updated for new fields ✅
+- [x] 9-slot timetable grid finalized ✅
+
+---
+
+## Phase 9 — Final Verification & Polish
+- [x] Comprehensive UI test for local data flow ✅
+- [x] Performance audit for large Excel imports (Room batching) ✅
+- [x] Ensure all screens (Home, Calendar, Data) reflect local state instantly ✅
+- [x] Final stabilization for build-ready Android package ✅
+
+---
+
 ## Markdown Docs Status
 
-- [x] `project_content.md` — master specification ✅
-- [x] `README.md` — repository overview ✅ (rewritten)
-- [x] `checklist.md` — this file ✅ (created)
-- [ ] `PROJECT_SPEC.md` — merge into project_content.md then delete
-- [ ] `DEVELOPMENT_REPORT.md` — archive or delete
+- [x] `project_content.md` — Updated for Local-Only logic ✅
+- [x] `README.md` — repository overview ✅
+- [x] `checklist.md` — this file ✅
